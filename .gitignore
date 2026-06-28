@@ -1,21 +1,22 @@
-# Godot 4+ specific ignores
-.godot/
-*.import
 
-# Export artifacts
-*.apk
+*~
 *.aab
-*.keystore
-
-# OS files
+/android/
+*.apk
+/builds/
 .DS_Store
-Thumbs.db
-
+# Editor files
+# Export artifacts
+.godot/
+# Godot 4+ specific ignores
 # IDE
-.vscode/
 .idea/
-*.swp
-*.swo
-
+*.import
+*.keystore
+*.log# Godot 4+ specific ignores
 # Logs
-*.log
+# OS files
+*.swo
+*.swp
+Thumbs.db
+.vscode/
