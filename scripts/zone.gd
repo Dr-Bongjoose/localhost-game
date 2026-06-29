@@ -314,7 +314,7 @@ func get_summary() -> String:
 	text += "Payout: %.1fx | Detection: %.1fx | Threshold: %.0f\n" % [
 		data_value, detection_rate, detection_threshold
 	]
-	text += "Capacity: %d/%d strains\n" % [deployed_strains.size(), capacity]
+	text += "Capacity: %d/%d specimens\n" % [deployed_strains.size(), capacity]
 	text += "Zone Heat: %.1f / %.0f\n" % [zone_heat, detection_threshold]
 	if not deployed_strains.is_empty():
 		text += "Deployed:\n"

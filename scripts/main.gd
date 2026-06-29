@@ -241,7 +241,7 @@ func _on_new_game_pressed() -> void:
 
 	# Re-enable breed button if it was cooling
 	breed_button.disabled = false
-	breed_button.text = "Breed Strains"
+	breed_button.text = "Breed Specimens"
 
 	# Initialize a fresh new game
 	_init_new_game()
@@ -332,13 +332,13 @@ func _apply_label_colors() -> void:
 
 func _process(delta: float) -> void:
 	# --- IDLE INCOME ---
-	# Strains not deployed to a zone still earn their base income (idle).
-	# Strains deployed to a zone earn base income * zone.data_value instead.
-	# So we calculate idle income (non-deployed strains) + zone income separately.
-	var idle_income: float = 0.0
-	for strain in player_strains:
-		if not _is_strain_deployed(strain):
-			idle_income += strain.get_income_per_second()
+	# Specimens that are NOT deployed earn ZERO data. They're sitting in
+	# containment doing nothing -- no income, no heat. The only way to earn
+	# data is to actively deploy specimens to zones.
+	# This makes every deployment a meaningful decision, not just "passive income."
+	# (Previously idle strains earned full income -- that made deployment feel
+	# optional and the game felt like a waiting simulator.)
+	var idle_income: float = 0.0  # Always zero -- no idle income anymore
 
 	# --- ZONE INCOME + TICKING ---
 	var zone_income: float = 0.0
@@ -374,9 +374,9 @@ func _process(delta: float) -> void:
 		if breed_cooldown <= 0.0:
 			breed_cooldown = 0.0
 			breed_button.disabled = false
-			breed_button.text = "Breed Strains"
+			breed_button.text = "Breed Specimens"
 
-	# --- RAID NOTIFICATIONS ---
+			# --- RAID NOTIFICATIONS ---
 	if not raid_notifications.is_empty():
 		_handle_raids(raid_notifications)
 
@@ -441,7 +441,7 @@ func _on_tab_zones_pressed() -> void:
 
 func update_strain_display() -> void:
 	if player_strains.is_empty():
-		strain_name_label.text = "No strains"
+		strain_name_label.text = "No specimens"
 		traits_label.text = ""
 		return
 	var strain: Strain = player_strains[active_strain_index]
@@ -452,29 +452,24 @@ func update_strain_display() -> void:
 	if dep_zone != null:
 		summary += "\n[Deployed: %s]" % dep_zone.zone_name
 	else:
-		summary += "\n[Idle]"
+		summary += "\n[Contained -- no income]"
 	traits_label.text = summary
 
 
 func update_data_display() -> void:
 	data_label.text = "Data: %.0f" % floor(player_data)
 
-	# Calculate total income (idle + zone)
-	var idle_income: float = 0.0
-	for strain in player_strains:
-		if not _is_strain_deployed(strain):
-			idle_income += strain.get_income_per_second()
+	# Only zone income counts (idle specimens earn nothing)
 	var z_income: float = 0.0
 	for zone in zones:
 		z_income += zone.get_zone_income()
 
-	var total_income: float = idle_income + z_income
-	income_label.text = "Income: %.1f/sec (%d strains)" % [total_income, player_strains.size()]
+	income_label.text = "Income: %.1f/sec (%d specimens)" % [z_income, player_strains.size()]
 	heat_label.text = "Heat: %.1f" % total_heat
 
 
 func update_strain_list() -> void:
-	var list_text: String = "Strains (%d):\n" % player_strains.size()
+	var list_text: String = "Specimens (%d):\n" % player_strains.size()
 	for i in range(player_strains.size()):
 		var strain: Strain = player_strains[i]
 		var marker: String = "  "
@@ -506,7 +501,7 @@ func update_breeding_dropdowns() -> void:
 
 func update_breed_cost_display() -> void:
 	if player_strains.size() < 2:
-		breed_cost_label.text = "Need at least 2 strains to breed"
+		breed_cost_label.text = "Need at least 2 specimens to breed"
 		breed_button.disabled = true
 		return
 	var idx_a: int = parent_a_dropdown.get_selected_id()
@@ -515,7 +510,7 @@ func update_breed_cost_display() -> void:
 	var strain_b: Strain = player_strains[idx_b]
 	var cost: int = Breeding.get_breed_cost(strain_a, strain_b)
 	if idx_a == idx_b:
-		breed_cost_label.text = "Select two DIFFERENT strains"
+		breed_cost_label.text = "Select two DIFFERENT specimens"
 		breed_button.disabled = true
 	elif player_data < cost:
 		breed_cost_label.text = "Cost: %d data (not enough!)" % cost
@@ -534,10 +529,10 @@ func _on_breed_button_pressed() -> void:
 	var idx_b: int = parent_b_dropdown.get_selected_id()
 
 	if idx_a == idx_b:
-		breed_result_label.text = "Cannot breed a strain with itself!"
+		breed_result_label.text = "Cannot breed a specimen with itself!"
 		return
 	if player_strains.size() < 2:
-		breed_result_label.text = "Need at least 2 strains!"
+		breed_result_label.text = "Need at least 2 specimens!"
 		return
 
 	var parent_a: Strain = player_strains[idx_a]
@@ -625,7 +620,7 @@ func _on_next_button_pressed() -> void:
 func update_codex_display() -> void:
 	codex_summary_label.text = codex.get_summary()
 	if codex.get_count() == 0:
-		codex_entry_label.text = "No strains discovered yet.\nBreed strains to fill your codex!"
+		codex_entry_label.text = "No specimens discovered yet.\nBreed specimens to fill your codex!"
 		codex_counter_label.text = "0 / 0"
 		return
 	codex_index = clampi(codex_index, 0, codex.get_count() - 1)
@@ -698,7 +693,7 @@ func update_zone_display() -> void:
 	if selected_strain == null:
 		zone_deploy_button.disabled = true
 		zone_recall_button.disabled = true
-		zone_action_label.text = "No strains available to deploy"
+		zone_action_label.text = "No specimens available to deploy"
 	elif zone.has_strain(selected_strain):
 		zone_deploy_button.disabled = true
 		zone_recall_button.disabled = false
