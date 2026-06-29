@@ -101,6 +101,23 @@ var _auto_save_timer: float = 0.0       ## Counts up toward next auto-save
 # ---------------------------------------------------------------------------
 
 func _ready() -> void:
+	# --- APPLY THE LAB THEME ---
+	# The theme defines all colors, button styles, and panel styles for the
+	# entire game. Setting it on the root Control means every child inherits it.
+	# Individual labels can still override with theme_override_colors for special
+	# cases (like the data counter using a brighter green).
+	theme = LabTheme.create()
+
+	# --- APPLY SEMANTIC COLORS TO SPECIFIC LABELS ---
+	# The theme sets a default text color, but certain labels need special colors
+	# based on what they MEAN (data, heat, titles, section headers).
+	# We set these here so the colors live in code (version-controlled) rather
+	# than scattered in the .tscn file.
+	#
+	# Each label gets a theme_override_color. This overrides the theme's default
+	# for that specific label only.
+	_apply_label_colors()
+
 	# --- TRY TO LOAD SAVE ---
 	# Before creating a new game, check if a save file exists.
 	# If it does, load it. If not (or if loading fails), start fresh.
@@ -157,6 +174,73 @@ func _init_new_game() -> void:
 	player_strains.append(Strain.create_random(1, "Worm"))
 	codex.add_strain(player_strains[0])
 	codex.add_strain(player_strains[1])
+
+
+## Applies semantic colors to specific labels throughout the UI.
+## This replaces the 14+ theme_override_colors that were scattered in main.tscn.
+## Now all colors are defined in lab_theme.gd as named constants, and we just
+## reference them here. Change a color in lab_theme.gd, everything updates.
+##
+## WHY SOME LABELS USE add_theme_color_override AND OTHERS DON'T:
+#  Labels that should use the default text color (TEXT_DEFAULT ashen grey)
+#  don't need any override -- they get it from the theme automatically.
+#  Only labels with a SPECIAL meaning get an override:
+#  - Strain names -> sickly green (titles)
+#  - Data counter -> bright green (currency)
+#  - Heat -> orange-red (warning)
+#  - Section headers -> purple/blue/green accents
+#  - Results/costs -> yellow tones
+func _apply_label_colors() -> void:
+	# --- CONTAINMENT VIEW ---
+
+	# Strain name = title (sickly green)
+	strain_name_label.add_theme_color_override("font_color", LabTheme.TEXT_TITLE)
+
+	# Data counter = currency (bright green)
+	data_label.add_theme_color_override("font_color", LabTheme.TEXT_DATA)
+
+	# Income = secondary stat (dim grey -- comes from theme default, no override needed)
+
+	# Heat = warning (orange-red)
+	heat_label.add_theme_color_override("font_color", LabTheme.TEXT_HEAT)
+
+	# Strain list = default grey (no override needed, uses theme default)
+
+	# --- BREEDING PANEL ---
+
+	# Section header = bruised purple
+	var breed_title: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/BreedPanel/BreedTitle
+	breed_title.add_theme_color_override("font_color", LabTheme.HEADER_BREED)
+
+	# Cost = bile yellow
+	var breed_cost: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/BreedPanel/BreedCostLabel
+	breed_cost.add_theme_color_override("font_color", LabTheme.TEXT_COST)
+
+	# Result = warm yellow (action feedback)
+	var breed_result: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/BreedPanel/BreedResultLabel
+	breed_result.add_theme_color_override("font_color", LabTheme.TEXT_RESULT)
+
+	# --- CODEX VIEW ---
+
+	# Summary = default grey (no override needed)
+
+	# Entry display = muted green (codex entries have a clinical green tint)
+	var codex_entry: Label = $ScrollContainer/MarginContainer/VBox/CodexView/CodexEntryLabel
+	codex_entry.add_theme_color_override("font_color", LabTheme.HEADER_CODEX)
+
+	# --- ZONES VIEW ---
+
+	# Zone info = muted green
+	var zone_info: Label = $ScrollContainer/MarginContainer/VBox/ZonesView/ZoneInfoLabel
+	zone_info.add_theme_color_override("font_color", LabTheme.HEADER_CODEX)
+
+	# Section header = cold blue-purple
+	var deploy_title: Label = $ScrollContainer/MarginContainer/VBox/ZonesView/ZoneDeployPanel/DeployTitle
+	deploy_title.add_theme_color_override("font_color", LabTheme.HEADER_DEPLOY)
+
+	# Action label = warm yellow (action feedback, same as breed result)
+	var zone_action: Label = $ScrollContainer/MarginContainer/VBox/ZonesView/ZoneDeployPanel/ZoneActionLabel
+	zone_action.add_theme_color_override("font_color", LabTheme.TEXT_RESULT)
 
 
 # ---------------------------------------------------------------------------
