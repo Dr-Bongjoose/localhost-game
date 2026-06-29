@@ -120,7 +120,7 @@ theme_override_colors/font_color = Color(0.8, 0.5, 0.3, 1)
 
 [node name="ContainmentView" type="Control" parent="ScrollContainer/MarginContainer/VBox"]
 visible = true
-custom_minimum_size = Vector2(0, 750)
+custom_minimum_size = Vector2(0, 950)
 layout_mode = 2
 
 [node name="StrainNameLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView"]
@@ -186,12 +186,84 @@ horizontal_alignment = 1
 theme_override_font_sizes/font_size = 12
 autowrap_mode = 2
 
+[node name="HomeBasePanel" type="Panel" parent="ScrollContainer/MarginContainer/VBox/ContainmentView"]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 395.0
+offset_right = 640.0
+offset_bottom = 575.0
+
+[node name="HomeBaseTitle" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel"]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 610.0
+offset_bottom = 35.0
+text = "--- HOME BASE DEFENSE ---"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 16
+
+[node name="HomeBaseInfo" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel"]
+layout_mode = 0
+offset_left = 15.0
+offset_top = 40.0
+offset_right = 605.0
+offset_bottom = 115.0
+text = "Home base status will appear here"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 13
+autowrap_mode = 2
+
+[node name="DefenderLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel"]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 125.0
+offset_right = 90.0
+offset_bottom = 147.0
+text = "Assign:"
+theme_override_font_sizes/font_size = 13
+
+[node name="DefenderDropdown" type="OptionButton" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel"]
+layout_mode = 0
+offset_left = 70.0
+offset_top = 122.0
+offset_right = 460.0
+offset_bottom = 150.0
+
+[node name="AssignDefenderButton" type="Button" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel"]
+layout_mode = 0
+offset_left = 470.0
+offset_top = 120.0
+offset_right = 600.0
+offset_bottom = 152.0
+text = "Assign"
+theme_override_font_sizes/font_size = 12
+
+[node name="RecallDefenderButton" type="Button" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel"]
+layout_mode = 0
+offset_left = 110.0
+offset_top = 160.0
+offset_right = 280.0
+offset_bottom = 195.0
+text = "Recall Defender"
+
+[node name="HomeBaseActionLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel"]
+layout_mode = 0
+offset_left = 300.0
+offset_top = 162.0
+offset_right = 600.0
+offset_bottom = 195.0
+text = ""
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 12
+autowrap_mode = 2
+
 [node name="BreedPanel" type="Panel" parent="ScrollContainer/MarginContainer/VBox/ContainmentView"]
 layout_mode = 0
 offset_left = 20.0
-offset_top = 400.0
+offset_top = 590.0
 offset_right = 640.0
-offset_bottom = 730.0
+offset_bottom = 920.0
 
 [node name="BreedTitle" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/BreedPanel"]
 layout_mode = 0

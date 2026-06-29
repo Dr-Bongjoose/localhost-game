@@ -367,7 +367,8 @@ static func build_save_state(
 		codex_index: int,
 		zones: Array[Zone],
 		active_zone_index: int,
-		strain_deploy_map: Dictionary
+		strain_deploy_map: Dictionary,
+		home_base: HomeBase
 	) -> Dictionary:
 
 	return {
@@ -380,21 +381,19 @@ static func build_save_state(
 		"active_zone_index": active_zone_index,
 
 		# --- STRAINS ---
-		# The player's entire strain collection, serialized to plain dicts
 		"player_strains": serialize_strain_array(player_strains),
 
 		# --- CODEX ---
-		# The full codex with all discovered strains and breed counts
 		"codex": serialize_codex(codex),
 
 		# --- ZONES ---
-		# Each zone with its properties + names of deployed strains
 		"zones": _serialize_zone_array(zones),
 
 		# --- DEPLOY MAP ---
-		# We save this as strain_name -> zone_index (an int, not a Zone object)
-		# because we can't save object references in JSON.
 		"deploy_map": _serialize_deploy_map(strain_deploy_map, zones),
+
+		# --- HOME BASE ---
+		"home_base": home_base.serialize(),
 	}
 
 ## Helper: serializes an array of Zones

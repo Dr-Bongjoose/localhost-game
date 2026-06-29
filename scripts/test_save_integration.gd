@@ -68,7 +68,8 @@ func _init() -> void:
 	print("\n[2] Saving game state...")
 	var state: Dictionary = SaveSystem.build_save_state(
 		strains, 5000.0, 15.0, 0.0, 2,
-		game_codex, 0, game_zones, 1, game_deploy_map
+		game_codex, 0, game_zones, 1, game_deploy_map,
+		HomeBase.new()
 	)
 	var saved: bool = SaveSystem.save_game(state)
 	if not saved:
@@ -211,7 +212,8 @@ func _init() -> void:
 	# Re-save the updated state
 	var state_after_raid: Dictionary = SaveSystem.build_save_state(
 		restored_strains, 5200.0, 20.0, 0.0, 0,
-		restored_codex, 0, restored_zones, 0, restored_deploy_map
+		restored_codex, 0, restored_zones, 0, restored_deploy_map,
+		HomeBase.new()
 	)
 	SaveSystem.save_game(state_after_raid)
 

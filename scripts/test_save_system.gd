@@ -257,12 +257,13 @@ func _init() -> void:
 		0,             # codex_index
 		save_zones,    # zones
 		1,             # active_zone_index
-		save_deploy_map  # strain_deploy_map
+		save_deploy_map,  # strain_deploy_map
+		HomeBase.new()  # home_base
 	)
 
 	# Check all expected keys exist
 	var expected_keys: Array = ["player_data", "total_heat", "breed_cooldown", "active_strain_index",
-		"codex_index", "active_zone_index", "player_strains", "codex", "zones", "deploy_map"]
+		"codex_index", "active_zone_index", "player_strains", "codex", "zones", "deploy_map", "home_base"]
 	var keys_ok: bool = true
 	for key in expected_keys:
 		if not full_state.has(key):

@@ -89,6 +89,13 @@ extends Control
 @onready var discovery_hint: Label = $DiscoveryOverlay/DiscoveryHint
 @onready var discovery_bg: ColorRect = $DiscoveryOverlay/DiscoveryBG
 
+# Home Base panel references (inside containment view)
+@onready var home_base_info: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel/HomeBaseInfo
+@onready var defender_dropdown: OptionButton = $ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel/DefenderDropdown
+@onready var assign_defender_button: Button = $ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel/AssignDefenderButton
+@onready var recall_defender_button: Button = $ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel/RecallDefenderButton
+@onready var home_base_action_label: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel/HomeBaseActionLabel
+
 # ---------------------------------------------------------------------------
 # GAME STATE
 # ---------------------------------------------------------------------------
@@ -104,6 +111,8 @@ var codex_index: int = 0               ## Which codex entry is displayed
 
 var zones: Array[Zone] = []             ## All available zones
 var active_zone_index: int = 0         ## Which zone is displayed (zones view)
+
+var home_base: HomeBase = null         ## The home base defense system
 
 var current_view: String = "containment"  ## "containment", "codex", or "zones"
 
@@ -173,6 +182,8 @@ func _ready() -> void:
 	update_codex_display()
 	update_zone_display()
 	update_deploy_dropdown()
+	update_defender_dropdown()
+	update_home_base_display()
 
 	# Connect button signals
 	breed_button.pressed.connect(_on_breed_button_pressed)
@@ -188,6 +199,8 @@ func _ready() -> void:
 	zone_deploy_button.pressed.connect(_on_deploy_pressed)
 	zone_recall_button.pressed.connect(_on_recall_pressed)
 	new_game_button.pressed.connect(_on_new_game_pressed)
+	assign_defender_button.pressed.connect(_on_assign_defender_pressed)
+	recall_defender_button.pressed.connect(_on_recall_defender_pressed)
 
 	update_breed_cost_display()
 	_switch_view("containment")
@@ -198,6 +211,7 @@ func _ready() -> void:
 ## This is the old _ready() logic, split out so _ready() can try loading first.
 func _init_new_game() -> void:
 	codex = Codex.new()
+	home_base = HomeBase.new()
 
 	# Create the 4 zone types (all unlocked in Phase 1)
 	zones.append(Zone.create(Zone.ZoneType.CONSUMER))
@@ -238,6 +252,14 @@ func _on_new_game_pressed() -> void:
 	_discovery_active = false
 	discovery_overlay.visible = false
 	discovery_overlay.modulate.a = 1.0
+
+	# Reset home base
+	if home_base != null:
+		home_base.defenders.clear()
+		home_base.reset_timer()
+		home_base.defense_data_earned = 0.0
+		home_base.attacks_resisted = 0
+		home_base.breaches_suffered = 0
 
 	# Re-enable breed button if it was cooling
 	breed_button.disabled = false
@@ -321,6 +343,10 @@ func _apply_label_colors() -> void:
 	var deploy_title: Label = $ScrollContainer/MarginContainer/VBox/ZonesView/ZoneDeployPanel/DeployTitle
 	deploy_title.add_theme_color_override("font_color", LabTheme.HEADER_DEPLOY)
 
+	# Home base section header = bruised purple (same as breed lab)
+	var home_base_title: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel/HomeBaseTitle
+	home_base_title.add_theme_color_override("font_color", LabTheme.HEADER_BREED)
+
 	# Action label = warm yellow (action feedback, same as breed result)
 	var zone_action: Label = $ScrollContainer/MarginContainer/VBox/ZonesView/ZoneDeployPanel/ZoneActionLabel
 	zone_action.add_theme_color_override("font_color", LabTheme.TEXT_RESULT)
@@ -403,6 +429,17 @@ func _process(delta: float) -> void:
 		if _raid_alert_timer <= 0.0:
 			_raid_alert_timer = 0.0
 			raid_alert_overlay.visible = false
+
+	# --- HOME BASE DEFENSE ---
+	# Tick the home base attack timer. When it fires, resolve an attack.
+	# If the attack succeeds (no breach), the player earns data from defenders.
+	# If it breaches (no defenders or all fail), the player loses data.
+	if home_base != null:
+		if home_base.tick(delta, total_heat):
+			_resolve_home_base_attack()
+		# Update the home base UI (attack countdown, defender status)
+		if current_view == "containment":
+			update_home_base_display()
 
 
 # ---------------------------------------------------------------------------
@@ -863,6 +900,134 @@ func _show_raid_alert(message: String, strain_destroyed: bool) -> void:
 
 
 # ---------------------------------------------------------------------------
+# HOME BASE DEFENSE
+# ---------------------------------------------------------------------------
+
+## Updates the home base info display (attack countdown, defender list).
+func update_home_base_display() -> void:
+	if home_base == null:
+		home_base_info.text = "Home base not initialized"
+		return
+	home_base_info.text = home_base.get_summary()
+
+	# Update button states based on selected specimen
+	var selected: Strain = _get_selected_defender_strain()
+	if selected == null:
+		assign_defender_button.disabled = true
+		recall_defender_button.disabled = true
+		home_base_action_label.text = "No specimens available"
+	elif home_base.is_defender(selected):
+		assign_defender_button.disabled = true
+		recall_defender_button.disabled = false
+		home_base_action_label.text = "%s is defending" % selected.strain_name
+	elif home_base.is_full():
+		assign_defender_button.disabled = true
+		recall_defender_button.disabled = true
+		home_base_action_label.text = "Base full (%d/%d)" % [home_base.defenders.size(), HomeBase.HOME_BASE_CAPACITY]
+	elif _is_strain_deployed(selected):
+		assign_defender_button.disabled = true
+		recall_defender_button.disabled = true
+		home_base_action_label.text = "%s is deployed to a zone. Recall first." % selected.strain_name
+	else:
+		assign_defender_button.disabled = false
+		recall_defender_button.disabled = true
+		home_base_action_label.text = "Ready to assign %s" % selected.strain_name
+
+
+## Populates the defender dropdown with available specimens.
+func update_defender_dropdown() -> void:
+	defender_dropdown.clear()
+	for i in range(player_strains.size()):
+		var strain: Strain = player_strains[i]
+		var label: String = "%s (Gen %d)" % [strain.strain_name, strain.generation]
+		if home_base != null and home_base.is_defender(strain):
+			label += " [Defender]"
+		elif _is_strain_deployed(strain):
+			label += " [%s]" % _get_strain_zone(strain).get_type_name()
+		defender_dropdown.add_item(label, i)
+	if player_strains.size() > 0:
+		defender_dropdown.select(0)
+
+
+## Returns the specimen currently selected in the defender dropdown.
+func _get_selected_defender_strain() -> Strain:
+	if player_strains.is_empty():
+		return null
+	var idx: int = defender_dropdown.get_selected_id()
+	if idx < 0 or idx >= player_strains.size():
+		return null
+	return player_strains[idx]
+
+
+## Assigns the selected specimen as a home base defender.
+func _on_assign_defender_pressed() -> void:
+	var strain: Strain = _get_selected_defender_strain()
+	if strain == null:
+		return
+	if home_base.assign_defender(strain):
+		home_base_action_label.text = "Assigned %s as defender!" % strain.strain_name
+		update_strain_display()
+		update_strain_list()
+		update_defender_dropdown()
+		update_home_base_display()
+	else:
+		home_base_action_label.text = "Failed to assign (base full?)"
+
+
+## Recalls the selected specimen from defender duty.
+func _on_recall_defender_pressed() -> void:
+	var strain: Strain = _get_selected_defender_strain()
+	if strain == null:
+		return
+	if home_base.recall_defender(strain):
+		home_base_action_label.text = "Recalled %s from defense" % strain.strain_name
+		update_strain_display()
+		update_strain_list()
+		update_defender_dropdown()
+		update_home_base_display()
+	else:
+		home_base_action_label.text = "That specimen isn't defending"
+
+
+## Resolves a home base attack: defenders roll resilience vs attack strength.
+## Successful defenses earn data. Breaches lose data.
+func _resolve_home_base_attack() -> void:
+	var result: Dictionary = home_base.resolve_attack(total_heat)
+
+	# Award data from successful defenses
+	if result["total_reward"] > 0:
+		player_data += result["total_reward"]
+
+	# Handle breach -- player loses data
+	if result["breach"]:
+		var penalty: float = floor(player_data * HomeBase.BREACH_PENALTY)
+		player_data -= penalty
+		var breach_msg: String = "HOME BASE BREACH!\nLost %d data" % int(penalty)
+		if home_base.is_empty():
+			breach_msg += "\nNo defenders assigned!"
+		_show_raid_alert(breach_msg, true)
+		print("Home base breach! Lost %d data (attack strength: %.2f)" % [int(penalty), result["attack_strength"]])
+	else:
+		# Show a defense alert
+		var defense_msg: String = "Home base defended!\nEarned %d data" % int(result["total_reward"])
+		# Show which defenders survived/fell
+		for d in result["defender_results"]:
+			var s: Strain = d["strain"]
+			if d["survived"]:
+				defense_msg += "\n  %s held ( +%d )" % [s.strain_name, int(d["reward"])]
+			else:
+				defense_msg += "\n  %s was overwhelmed!" % s.strain_name
+		_show_raid_alert(defense_msg, false)
+		print("Home base defended! Earned %d data (attack: %.2f)" % [int(result["total_reward"]), result["attack_strength"]])
+
+	# Update UI
+	update_home_base_display()
+	update_strain_display()
+	update_strain_list()
+	update_defender_dropdown()
+
+
+# ---------------------------------------------------------------------------
 # DISCOVERY MOMENT
 # ---------------------------------------------------------------------------
 # When breeding succeeds, this function shows a dramatic reveal overlay.
@@ -1041,7 +1206,8 @@ func _save_game() -> void:
 		codex_index,
 		zones,
 		active_zone_index,
-		strain_deploy_map
+		strain_deploy_map,
+		home_base
 	)
 	SaveSystem.save_game(state)
 
@@ -1090,6 +1256,13 @@ func _load_game() -> bool:
 	# This also rebuilds strain_deploy_map (strain_name -> Zone).
 	var saved_zone_data: Array = state.get("zones", [])
 	strain_deploy_map = SaveSystem.reconnect_deployed_strains(zones, player_strains, saved_zone_data)
+
+	# --- RESTORE HOME BASE ---
+	# Deserialize home base and reconnect defenders by name
+	var saved_home_base: Dictionary = state.get("home_base", {})
+	home_base = HomeBase.new()
+	if not saved_home_base.is_empty():
+		home_base.deserialize(saved_home_base, player_strains)
 
 	# --- VALIDATION ---
 	# If we have no strains (corrupted save), start fresh
