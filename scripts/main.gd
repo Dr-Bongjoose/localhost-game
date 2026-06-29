@@ -66,6 +66,24 @@ extends Control
 @onready var zone_recall_button: Button = $ScrollContainer/MarginContainer/VBox/ZonesView/ZoneDeployPanel/RecallButton
 @onready var zone_action_label: Label = $ScrollContainer/MarginContainer/VBox/ZonesView/ZoneDeployPanel/ZoneActionLabel
 
+# Zone heat bar (visual danger indicator)
+@onready var zone_heat_bar: ProgressBar = $ScrollContainer/MarginContainer/VBox/ZonesView/ZoneHeatBar
+
+# Raid alert overlay (flashes on screen when a raid happens)
+@onready var raid_alert_overlay: Panel = $RaidAlertOverlay
+@onready var raid_alert_text: Label = $RaidAlertOverlay/RaidAlertText
+@onready var raid_alert_bg: ColorRect = $RaidAlertOverlay/RaidAlertBG
+
+# Discovery moment overlay (the "new strain bred" reveal)
+@onready var discovery_overlay: Panel = $DiscoveryOverlay
+@onready var discovery_title: Label = $DiscoveryOverlay/DiscoveryTitle
+@onready var discovery_name: Label = $DiscoveryOverlay/DiscoveryName
+@onready var discovery_rarity: Label = $DiscoveryOverlay/DiscoveryRarity
+@onready var discovery_traits: Label = $DiscoveryOverlay/DiscoveryTraits
+@onready var discovery_mutations: Label = $DiscoveryOverlay/DiscoveryMutations
+@onready var discovery_hint: Label = $DiscoveryOverlay/DiscoveryHint
+@onready var discovery_bg: ColorRect = $DiscoveryOverlay/DiscoveryBG
+
 # ---------------------------------------------------------------------------
 # GAME STATE
 # ---------------------------------------------------------------------------
@@ -88,13 +106,25 @@ var current_view: String = "containment"  ## "containment", "codex", or "zones"
 ## We use the strain's name as key since Strain is a Resource (not hashable by default)
 var strain_deploy_map: Dictionary = {}
 
-const BREED_COOLDOWN_TIME: float = 5.0
+const BREED_COOLDOWN_TIME: float = 15.0  ## Was 5s -- increased so each breed is a deliberate choice
 
 # --- SAVE SYSTEM ---
 # Auto-save fires every AUTO_SAVE_INTERVAL seconds so a crash or accidental
 # close doesn't wipe your progress. We also save once on exit.
 const AUTO_SAVE_INTERVAL: float = 30.0  ## How often to auto-save (seconds)
 var _auto_save_timer: float = 0.0       ## Counts up toward next auto-save
+
+# --- RAID ALERT ---
+# When a raid happens, we show a full-screen overlay that flashes red.
+# This timer counts down how long the overlay stays visible before auto-hiding.
+var _raid_alert_timer: float = 0.0      ## Time remaining on the raid alert overlay
+const RAID_ALERT_DURATION: float = 3.0  ## How long the raid alert stays on screen (seconds)
+
+# --- DISCOVERY MOMENT ---
+# When breeding produces a new strain, we show a dramatic reveal overlay.
+# Each element fades in sequentially (title, then name, then rarity, then traits).
+# The player taps the screen to dismiss it, or it auto-dismisses after a timeout.
+var _discovery_active: bool = false    ## Is the discovery overlay currently showing?
 
 # ---------------------------------------------------------------------------
 # LIFECYCLE
@@ -306,6 +336,16 @@ func _process(delta: float) -> void:
 		_auto_save_timer = 0.0
 		_save_game()
 
+	# --- RAID ALERT FADE ---
+	# If the raid alert overlay is visible, count down the timer and hide it
+	# when it reaches zero. This auto-dismisses the alert after RAID_ALERT_DURATION
+	# seconds so the player doesn't have to click anything.
+	if _raid_alert_timer > 0.0:
+		_raid_alert_timer -= delta
+		if _raid_alert_timer <= 0.0:
+			_raid_alert_timer = 0.0
+			raid_alert_overlay.visible = false
+
 
 # ---------------------------------------------------------------------------
 # VIEW SWITCHING
@@ -466,23 +506,16 @@ func _on_breed_button_pressed() -> void:
 	var rarity: Codex.Rarity = codex.calculate_rarity(child)
 	var rarity_name: String = codex.get_rarity_name(rarity)
 
-	var result_text: String = "NEW STRAIN DISCOVERED!\n"
-	result_text += "%s (Generation %d)\n" % [child.strain_name, child.generation]
-	result_text += "Codex Entry: %s\n" % rarity_name
-
-	if mutations.is_empty():
-		result_text += "No mutations detected."
-	else:
-		result_text += "MUTATIONS DETECTED:\n"
-		for trait_name in mutations:
-			var data: Dictionary = mutations[trait_name]
-			result_text += "  %s: expected %.0f%%, got %.0f%%\n" % [
-				trait_name.capitalize(),
-				data["expected"] * 100,
-				data["actual"] * 100
-			]
-
+	# Keep a short summary in the breed result label too (for when the overlay closes)
+	var result_text: String = "Bred: %s (Gen %d) [%s]" % [child.strain_name, child.generation, rarity_name]
+	if not mutations.is_empty():
+		result_text += " -- %d mutation(s)!" % mutations.size()
 	breed_result_label.text = result_text
+
+	# --- SHOW THE DISCOVERY MOMENT ---
+	# Instead of just dumping text, we show a dramatic reveal overlay.
+	# Each element fades in sequentially using Tweens (Godot's animation tool).
+	_show_discovery_moment(child, rarity, mutations)
 
 	breed_cooldown = BREED_COOLDOWN_TIME
 	breed_button.disabled = true
@@ -574,6 +607,33 @@ func update_zone_display() -> void:
 	var zone: Zone = zones[active_zone_index]
 	zone_info_label.text = zone.get_summary()
 	zone_counter_label.text = "%d / %d" % [active_zone_index + 1, zones.size()]
+
+	# --- ZONE HEAT BAR ---
+	# Show the zone's current heat as a progress bar from 0 to the zone's
+	# detection threshold. The bar fills up as heat rises, and the color
+	# changes from green (safe) to yellow (caution) to red (danger).
+	var heat_pct: float = zone.zone_heat / zone.detection_threshold
+	zone_heat_bar.max_value = zone.detection_threshold
+	zone_heat_bar.value = zone.zone_heat
+
+	# Color the heat bar based on danger level:
+	# < 50% of threshold = muted green (safe)
+	# 50-75% = bile yellow (caution, should think about recalling)
+	# > 75% = deep crimson (danger, raid imminent)
+	var heat_color: Color
+	if heat_pct < 0.5:
+		heat_color = Color(0.3, 0.5, 0.3)      # Muted green
+	elif heat_pct < 0.75:
+		heat_color = Color(0.7, 0.65, 0.25)    # Bile yellow
+	else:
+		heat_color = Color(0.7, 0.2, 0.15)     # Deep crimson
+
+	# Apply the color to the progress bar's fill (the "fill" stylebox)
+	# We use a StyleBoxFlat so we can control the fill color directly
+	var heat_fill: StyleBoxFlat = StyleBoxFlat.new()
+	heat_fill.bg_color = heat_color
+	heat_fill.set_corner_radius_all(2)
+	zone_heat_bar.add_theme_stylebox_override("fill", heat_fill)
 
 	# Update deploy button state
 	var selected_strain: Strain = _get_selected_deploy_strain()
@@ -686,18 +746,25 @@ func _get_strain_zone(strain: Strain) -> Zone:
 
 
 ## Handles raid results -- removes destroyed strains from the player's
-## collection and shows a notification.
+## collection and shows a flashing alert overlay on screen.
+## This replaces the old behavior of quietly replacing text in a label.
 func _handle_raids(raids: Array) -> void:
+	# Build the alert message from all raid results
+	var alert_lines: Array = []
 	for raid in raids:
 		var strain: Strain = raid["strain"]
 		var survived: bool = raid["survived"]
+		var zone: Zone = _get_strain_zone(strain)
+		var zone_name: String = "Unknown Zone"
+		if zone != null:
+			zone_name = zone.zone_name
+
 		if survived:
-			zone_action_label.text = "RAID! %s survived!" % strain.strain_name
-			print("RAID: %s survived in %s" % [strain.strain_name, zones[active_zone_index].zone_name])
+			alert_lines.append("RAID in %s!\n%s SURVIVED" % [zone_name, strain.strain_name])
+			print("RAID: %s survived in %s" % [strain.strain_name, zone_name])
 		else:
-			# Strain was destroyed! Remove from player's collection.
-			zone_action_label.text = "RAID! %s was DESTROYED!" % strain.strain_name
-			print("RAID: %s destroyed in %s" % [strain.strain_name, zones[active_zone_index].zone_name])
+			alert_lines.append("RAID in %s!\n%s was DESTROYED!" % [zone_name, strain.strain_name])
+			print("RAID: %s destroyed in %s" % [strain.strain_name, zone_name])
 
 			# Remove from the zone (already done in zone.tick(), but clean up our map)
 			strain_deploy_map.erase(strain.strain_name)
@@ -710,12 +777,152 @@ func _handle_raids(raids: Array) -> void:
 				if active_strain_index >= player_strains.size():
 					active_strain_index = max(0, player_strains.size() - 1)
 
-			# Refresh all UI
-			update_strain_display()
-			update_strain_list()
-			update_breeding_dropdowns()
-			update_deploy_dropdown()
-			update_breed_cost_display()
+	# --- SHOW THE ALERT OVERLAY ---
+	# Join all raid lines into one message and show the overlay
+	var alert_msg: String = "\n\n".join(alert_lines)
+	_show_raid_alert(alert_msg, !raids[0]["survived"])
+
+	# Refresh all UI (strains may have been removed)
+	update_strain_display()
+	update_strain_list()
+	update_breeding_dropdowns()
+	update_deploy_dropdown()
+	update_breed_cost_display()
+	if current_view == "zones":
+		update_zone_display()
+
+
+## Shows the raid alert overlay with the given message.
+## If a strain was destroyed, the overlay flashes more intensely (brighter red).
+## The overlay auto-hides after RAID_ALERT_DURATION seconds (handled in _process).
+func _show_raid_alert(message: String, strain_destroyed: bool) -> void:
+	raid_alert_text.text = message
+	# Brighter red if a strain was destroyed, dimmer if it survived
+	if strain_destroyed:
+		raid_alert_bg.color = Color(0.6, 0.05, 0.05, 0.7)
+		raid_alert_text.add_theme_color_override("font_color", Color(0.95, 0.3, 0.2, 1))
+	else:
+		raid_alert_bg.color = Color(0.4, 0.15, 0.05, 0.5)
+		raid_alert_text.add_theme_color_override("font_color", Color(0.9, 0.7, 0.3, 1))
+
+	raid_alert_overlay.visible = true
+	_raid_alert_timer = RAID_ALERT_DURATION
+
+
+# ---------------------------------------------------------------------------
+# DISCOVERY MOMENT
+# ---------------------------------------------------------------------------
+# When breeding succeeds, this function shows a dramatic reveal overlay.
+# Each element (title, name, rarity, traits, mutations) fades in sequentially
+# using Godot's Tween system. A Tween is an animation tool that interpolates
+# a property (like modulate alpha) from one value to another over time.
+#
+# The sequence:
+#   0.0s: Dark overlay fades in (0.3s)
+#   0.3s: "NEW STRAIN DISCOVERED" title fades in (0.4s)
+#   0.7s: Strain name fades in (0.5s)
+#   1.2s: Rarity tier fades in with biological color (0.4s)
+#   1.6s: Traits fade in one by one (0.3s each)
+#   ~3.0s: Mutations fade in (if any) (0.4s)
+#   3.5s: "tap to continue" hint fades in (0.5s)
+# Player taps screen to dismiss, or it stays until tapped.
+
+## Shows the discovery moment overlay with animated sequential reveals.
+func _show_discovery_moment(child: Strain, rarity: Codex.Rarity, mutations: Dictionary) -> void:
+	# --- SET UP THE CONTENT ---
+	discovery_name.text = "%s (Generation %d)" % [child.strain_name, child.generation]
+
+	# Rarity with biological color
+	var rarity_name: String = codex.get_rarity_name(rarity)
+	var rarity_color: Color = codex.get_rarity_color(rarity)
+	discovery_rarity.text = rarity_name
+	discovery_rarity.add_theme_color_override("font_color", rarity_color)
+
+	# Traits summary
+	var traits_text: String = "Stealth: %.0f%% | Speed: %.0f%% | Payload: %.0f%%\n" % [
+		child.stealth * 100, child.speed * 100, child.payload * 100
+	]
+	traits_text += "Resilience: %.0f%% | Stability: %.0f%%\n" % [
+		child.resilience * 100, child.stability * 100
+	]
+	traits_text += "Personality: %s" % child.get_personality_label()
+	discovery_traits.text = traits_text
+
+	# Mutations (if any)
+	if mutations.is_empty():
+		discovery_mutations.text = "No mutations detected."
+	else:
+		var mut_text: String = "MUTATIONS DETECTED:\n"
+		for trait_name in mutations:
+			var data: Dictionary = mutations[trait_name]
+			mut_text += "  %s: expected %.0f%%, got %.0f%%\n" % [
+				trait_name.capitalize(),
+				data["expected"] * 100,
+				data["actual"] * 100
+			]
+		discovery_mutations.text = mut_text
+
+	# --- RESET ALL ELEMENTS TO INVISIBLE ---
+	# modulate.a = 0 means fully transparent. We fade them in with tweens.
+	discovery_title.modulate.a = 0.0
+	discovery_name.modulate.a = 0.0
+	discovery_rarity.modulate.a = 0.0
+	discovery_traits.modulate.a = 0.0
+	discovery_mutations.modulate.a = 0.0
+	discovery_hint.modulate.a = 0.0
+	discovery_bg.modulate.a = 0.0
+
+	# Show the overlay
+	discovery_overlay.visible = true
+	_discovery_active = true
+
+	# --- ANIMATE THE SEQUENCE ---
+	# create_tween() makes a new Tween attached to this node. It auto-frees
+	# when the animation completes. We chain sequential animations using
+	# tween_property() + set the delay so each element appears after the previous.
+
+	var tween: Tween = create_tween()
+
+	# 1. Dark background fades in (0 to 1 alpha over 0.3s)
+	tween.tween_property(discovery_bg, "modulate:a", 1.0, 0.3)
+
+	# 2. Title fades in (0.3s delay, 0.4s duration)
+	tween.tween_property(discovery_title, "modulate:a", 1.0, 0.4).set_delay(0.0)
+
+	# 3. Strain name fades in (after title, 0.5s duration)
+	tween.tween_property(discovery_name, "modulate:a", 1.0, 0.5)
+
+	# 4. Rarity fades in (after name, 0.4s duration)
+	tween.tween_property(discovery_rarity, "modulate:a", 1.0, 0.4)
+
+	# 5. Traits fade in (after rarity, 0.5s duration)
+	tween.tween_property(discovery_traits, "modulate:a", 1.0, 0.5)
+
+	# 6. Mutations fade in (after traits, 0.4s duration)
+	tween.tween_property(discovery_mutations, "modulate:a", 1.0, 0.4)
+
+	# 7. "tap to continue" hint fades in last (0.5s duration)
+	tween.tween_property(discovery_hint, "modulate:a", 1.0, 0.5)
+
+	# When the tween completes, the hint is fully visible and the player can tap.
+	# The overlay stays visible until tapped (handled in _unhandled_input).
+
+
+## Hides the discovery moment overlay and resets state.
+## Called when the player taps the screen during the discovery moment.
+func _hide_discovery_moment() -> void:
+	if not _discovery_active:
+		return
+
+	# Fade out the whole overlay over 0.3s, then hide it
+	var tween: Tween = create_tween()
+	tween.tween_property(discovery_overlay, "modulate:a", 0.0, 0.3)
+	# When the fade-out completes, hide the overlay and reset alpha for next time
+	tween.tween_callback(func():
+		discovery_overlay.visible = false
+		discovery_overlay.modulate.a = 1.0
+		_discovery_active = false
+	)
 
 
 # ---------------------------------------------------------------------------
@@ -723,6 +930,23 @@ func _handle_raids(raids: Array) -> void:
 # ---------------------------------------------------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
+	# --- DISCOVERY MOMENT: TAP TO DISMISS ---
+	# If the discovery overlay is showing, any tap or key press dismisses it.
+	# We check this FIRST so the input doesn't also trigger navigation.
+	if _discovery_active:
+		if event is InputEventKey and event.pressed:
+			_hide_discovery_moment()
+			get_viewport().set_input_as_handled()
+			return
+		elif event is InputEventScreenTouch and event.pressed:
+			_hide_discovery_moment()
+			get_viewport().set_input_as_handled()
+			return
+		elif event is InputEventMouseButton and event.pressed:
+			_hide_discovery_moment()
+			get_viewport().set_input_as_handled()
+			return
+
 	if event is InputEventKey and event.pressed:
 		match event.keycode:
 			KEY_LEFT:

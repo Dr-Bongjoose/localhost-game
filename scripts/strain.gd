@@ -107,12 +107,14 @@ enum Personality {
 
 ## Returns the data (currency) this strain generates per second.
 ## Formula: payload is the base, speed modifies it.
-## A strain with 0.5 payload and 0.5 speed earns: 0.5 * 10 * (0.5 + 0.5) = 5.0
-## A strain with 0.8 payload and 0.7 speed earns: 0.8 * 10 * (0.7 + 0.5) = 9.6
-## The * 10 is a base multiplier we can tune for game balance.
+## A strain with 0.5 payload and 0.5 speed earns: 0.5 * 5 * (0.5 + 0.5) = 2.5
+## A strain with 0.8 payload and 0.7 speed earns: 0.8 * 5 * (0.7 + 0.5) = 4.8
+## The * 5 is a base multiplier we can tune for game balance.
+## (Was * 10 -- halved to make data accumulate slower so breeding feels like
+## a real investment, not something you can spam.)
 func get_income_per_second() -> float:
 	# Base income from payload (how much data it can extract)
-	var base_income: float = payload * 10.0
+	var base_income: float = payload * 5.0
 	# Speed bonus: faster strains reach more of the server, extracting more
 	# The (speed + 0.5) means even a slow strain gets 50% of its base income
 	var speed_multiplier: float = speed + 0.5

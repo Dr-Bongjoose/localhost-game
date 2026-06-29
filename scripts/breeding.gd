@@ -34,13 +34,16 @@ extends RefCounted
 
 ## Returns the data cost to breed two strains.
 ## Higher generation strains are more expensive to breed.
-## Formula: base_cost * (1 + max_generation * cost_per_gen)
-## Two gen-1 strains: 50 * (1 + 1*10) = 100 data
-## Two gen-3 strains: 50 * (1 + 3*10) = 200 data
+## Formula: base_cost + max_generation * cost_per_gen
+## Two gen-1 strains: 150 + 1*50 = 200 data
+## Two gen-3 strains: 150 + 3*50 = 300 data
+## Two gen-5 strains: 150 + 5*50 = 400 data
+## (Was base 50, per_gen 10 -- tripled to make breeding a real decision.
+## With income halved, you now need to save up and choose carefully.)
 static func get_breed_cost(parent_a: Strain, parent_b: Strain) -> int:
 	var max_gen: int = max(parent_a.generation, parent_b.generation)
-	var base_cost: int = 50
-	var cost_per_gen: int = 10
+	var base_cost: int = 150
+	var cost_per_gen: int = 50
 	return base_cost + max_gen * cost_per_gen
 
 # ---------------------------------------------------------------------------
