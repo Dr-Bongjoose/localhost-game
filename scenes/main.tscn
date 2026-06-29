@@ -73,7 +73,7 @@ text = "Zones"
 
 [node name="ContainmentView" type="Control" parent="ScrollContainer/MarginContainer/VBox"]
 visible = true
-custom_minimum_size = Vector2(0, 500)
+custom_minimum_size = Vector2(0, 570)
 layout_mode = 2
 
 [node name="StrainNameLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView"]
@@ -92,17 +92,18 @@ layout_mode = 0
 offset_left = 0.0
 offset_top = 32.0
 offset_right = 660.0
-offset_bottom = 100.0
+offset_bottom = 138.0
 text = "Traits will appear here"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 13
+autowrap_mode = 2
 
 [node name="NavButtons" type="HBoxContainer" parent="ScrollContainer/MarginContainer/VBox/ContainmentView"]
 layout_mode = 0
 offset_left = 150.0
-offset_top = 100.0
+offset_top = 143.0
 offset_right = 510.0
-offset_bottom = 140.0
+offset_bottom = 183.0
 alignment = 1
 
 [node name="PrevButton" type="Button" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/NavButtons"]
@@ -124,9 +125,9 @@ text = "Next >"
 [node name="DataLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView"]
 layout_mode = 0
 offset_left = 0.0
-offset_top = 145.0
+offset_top = 188.0
 offset_right = 660.0
-offset_bottom = 170.0
+offset_bottom = 213.0
 text = "Data: 0"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 20
@@ -135,9 +136,9 @@ theme_override_colors/font_color = Color(0.6, 0.85, 0.6, 1)
 [node name="IncomeLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView"]
 layout_mode = 0
 offset_left = 0.0
-offset_top = 172.0
+offset_top = 215.0
 offset_right = 660.0
-offset_bottom = 190.0
+offset_bottom = 233.0
 text = "Income: 0.0/sec"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 13
@@ -146,9 +147,9 @@ theme_override_colors/font_color = Color(0.5, 0.5, 0.5, 1)
 [node name="HeatLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView"]
 layout_mode = 0
 offset_left = 0.0
-offset_top = 192.0
+offset_top = 235.0
 offset_right = 660.0
-offset_bottom = 210.0
+offset_bottom = 253.0
 text = "Heat: 0.0"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 13
@@ -157,9 +158,9 @@ theme_override_colors/font_color = Color(0.8, 0.5, 0.3, 1)
 [node name="StrainListLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView"]
 layout_mode = 0
 offset_left = 0.0
-offset_top = 215.0
+offset_top = 258.0
 offset_right = 660.0
-offset_bottom = 285.0
+offset_bottom = 328.0
 text = "Strains (0):"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 12
@@ -168,9 +169,9 @@ theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
 [node name="BreedPanel" type="Panel" parent="ScrollContainer/MarginContainer/VBox/ContainmentView"]
 layout_mode = 0
 offset_left = 0.0
-offset_top = 295.0
+offset_top = 338.0
 offset_right = 660.0
-offset_bottom = 500.0
+offset_bottom = 568.0
 
 [node name="BreedTitle" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/BreedPanel"]
 layout_mode = 0

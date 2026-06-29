@@ -90,26 +90,31 @@ var strain_deploy_map: Dictionary = {}
 
 const BREED_COOLDOWN_TIME: float = 5.0
 
+# --- SAVE SYSTEM ---
+# Auto-save fires every AUTO_SAVE_INTERVAL seconds so a crash or accidental
+# close doesn't wipe your progress. We also save once on exit.
+const AUTO_SAVE_INTERVAL: float = 30.0  ## How often to auto-save (seconds)
+var _auto_save_timer: float = 0.0       ## Counts up toward next auto-save
+
 # ---------------------------------------------------------------------------
 # LIFECYCLE
 # ---------------------------------------------------------------------------
 
 func _ready() -> void:
-	codex = Codex.new()
+	# --- TRY TO LOAD SAVE ---
+	# Before creating a new game, check if a save file exists.
+	# If it does, load it. If not (or if loading fails), start fresh.
+	if SaveSystem.has_save():
+		if _load_game():
+			print("Save loaded successfully -- continuing saved game")
+		else:
+			print("Save file exists but failed to load -- starting new game")
+			_init_new_game()
+	else:
+		print("No save file found -- starting new game")
+		_init_new_game()
 
-	# Create the 4 zone types (all unlocked in Phase 1)
-	zones.append(Zone.create(Zone.ZoneType.CONSUMER))
-	zones.append(Zone.create(Zone.ZoneType.CORPORATE))
-	zones.append(Zone.create(Zone.ZoneType.GOVERNMENT))
-	zones.append(Zone.create(Zone.ZoneType.DARK_WEB))
-
-	# Start with two seed strains
-	player_strains.append(Strain.create_seed())
-	player_strains.append(Strain.create_random(1, "Worm"))
-	codex.add_strain(player_strains[0])
-	codex.add_strain(player_strains[1])
-
-	# Update all UI
+	# Update all UI (works for both loaded and new game)
 	update_strain_display()
 	update_strain_list()
 	update_breeding_dropdowns()
@@ -133,6 +138,25 @@ func _ready() -> void:
 
 	update_breed_cost_display()
 	_switch_view("containment")
+
+
+## Initializes a brand new game with starting strains and zones.
+## Called from _ready() when no save file exists (or save is corrupted).
+## This is the old _ready() logic, split out so _ready() can try loading first.
+func _init_new_game() -> void:
+	codex = Codex.new()
+
+	# Create the 4 zone types (all unlocked in Phase 1)
+	zones.append(Zone.create(Zone.ZoneType.CONSUMER))
+	zones.append(Zone.create(Zone.ZoneType.CORPORATE))
+	zones.append(Zone.create(Zone.ZoneType.GOVERNMENT))
+	zones.append(Zone.create(Zone.ZoneType.DARK_WEB))
+
+	# Start with two seed strains
+	player_strains.append(Strain.create_seed())
+	player_strains.append(Strain.create_random(1, "Worm"))
+	codex.add_strain(player_strains[0])
+	codex.add_strain(player_strains[1])
 
 
 # ---------------------------------------------------------------------------
@@ -188,6 +212,15 @@ func _process(delta: float) -> void:
 	update_data_display()
 	if current_view == "zones":
 		update_zone_display()
+
+	# --- AUTO-SAVE ---
+	# Count up toward the next auto-save. When the timer hits the interval,
+	# save the game and reset the timer. This ensures a crash or accidental
+	# close never loses more than 30 seconds of progress.
+	_auto_save_timer += delta
+	if _auto_save_timer >= AUTO_SAVE_INTERVAL:
+		_auto_save_timer = 0.0
+		_save_game()
 
 
 # ---------------------------------------------------------------------------
@@ -624,3 +657,99 @@ func _unhandled_input(event: InputEvent) -> void:
 					"containment": _on_tab_codex_pressed()
 					"codex": _on_tab_zones_pressed()
 					"zones": _on_tab_containment_pressed()
+
+
+# ---------------------------------------------------------------------------
+# SAVE / LOAD
+# ---------------------------------------------------------------------------
+# These functions bridge main.gd's game state and SaveSystem.
+# _save_game() gathers all state into a dictionary and hands it to SaveSystem.
+# _load_game() takes a dictionary from SaveSystem and rebuilds all state.
+# _notification() catches the app-close event to save before exiting.
+
+## Saves the current game state to disk.
+## Called automatically every AUTO_SAVE_INTERVAL seconds and on app exit.
+func _save_game() -> void:
+	var state: Dictionary = SaveSystem.build_save_state(
+		player_strains,
+		player_data,
+		total_heat,
+		breed_cooldown,
+		active_strain_index,
+		codex,
+		codex_index,
+		zones,
+		active_zone_index,
+		strain_deploy_map
+	)
+	SaveSystem.save_game(state)
+
+
+## Loads the game state from disk and rebuilds all game objects.
+## Returns true if successful, false if the save is missing or corrupted.
+## Called from _ready() on game start.
+func _load_game() -> bool:
+	var state: Dictionary = SaveSystem.load_game()
+	if state.is_empty():
+		return false
+
+	# --- RESTORE SIMPLE VALUES ---
+	player_data = state.get("player_data", 0.0)
+	total_heat = state.get("total_heat", 0.0)
+	breed_cooldown = state.get("breed_cooldown", 0.0)
+	active_strain_index = state.get("active_strain_index", 0)
+	codex_index = state.get("codex_index", 0)
+	active_zone_index = state.get("active_zone_index", 0)
+
+	# --- RESTORE STRAINS ---
+	# Deserialize the player's strain collection from saved dictionaries
+	var saved_strains: Array = state.get("player_strains", [])
+	player_strains = SaveSystem.deserialize_strain_array(saved_strains)
+
+	# --- RESTORE CODEX ---
+	var saved_codex: Dictionary = state.get("codex", {})
+	if not saved_codex.is_empty():
+		codex = SaveSystem.deserialize_codex(saved_codex)
+	else:
+		# Fallback: rebuild codex from player strains (shouldn't happen)
+		codex = Codex.new()
+		for strain in player_strains:
+			codex.add_strain(strain)
+
+	# --- RESTORE ZONES ---
+	# Deserialize zones (properties only, no deployed strains yet)
+	var saved_zones: Array = state.get("zones", [])
+	zones.clear()
+	for zone_data in saved_zones:
+		zones.append(SaveSystem.deserialize_zone(zone_data))
+
+	# --- RECONNECT DEPLOYED STRAINS ---
+	# Zones saved the NAMES of deployed strains. Now we find the actual
+	# Strain objects in player_strains by name and put them back in the zones.
+	# This also rebuilds strain_deploy_map (strain_name -> Zone).
+	var saved_zone_data: Array = state.get("zones", [])
+	strain_deploy_map = SaveSystem.reconnect_deployed_strains(zones, player_strains, saved_zone_data)
+
+	# --- VALIDATION ---
+	# If we have no strains (corrupted save), start fresh
+	if player_strains.is_empty():
+		print("Save loaded but has no strains -- starting new game")
+		_init_new_game()
+		return false
+
+	# Clamp indices to valid ranges (in case save has stale values)
+	active_strain_index = clampi(active_strain_index, 0, max(0, player_strains.size() - 1))
+	codex_index = clampi(codex_index, 0, max(0, codex.get_count() - 1))
+	active_zone_index = clampi(active_zone_index, 0, max(0, zones.size() - 1))
+
+	return true
+
+
+## Called by Godot when system-level events happen (app closing, focus change).
+## We use it to save the game before the app exits so progress isn't lost.
+func _notification(what: int) -> void:
+	# WM_CLOSE_REQUEST is sent when the user closes the game window.
+	# MainTree.NOTIFICATION_WM_CLOSE_REQUEST = 4, but we use the constant.
+	if what == Node.NOTIFICATION_WM_CLOSE_REQUEST:
+		print("App closing -- saving game...")
+		_save_game()
