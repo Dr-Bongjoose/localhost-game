@@ -27,6 +27,9 @@ extends Control
 @onready var tab_codex: Button = $ScrollContainer/MarginContainer/VBox/TabBar/TabCodex
 @onready var tab_zones: Button = $ScrollContainer/MarginContainer/VBox/TabBar/TabZones
 
+# New Game button (deletes save and restarts fresh)
+@onready var new_game_button: Button = $ScrollContainer/MarginContainer/VBox/HeaderBar/NewGameButton
+
 # Containment view nodes
 @onready var containment_view: Control = $ScrollContainer/MarginContainer/VBox/ContainmentView
 @onready var strain_name_label: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/StrainNameLabel
@@ -182,6 +185,7 @@ func _ready() -> void:
 	zone_nav_next.pressed.connect(_on_zone_next_pressed)
 	zone_deploy_button.pressed.connect(_on_deploy_pressed)
 	zone_recall_button.pressed.connect(_on_recall_pressed)
+	new_game_button.pressed.connect(_on_new_game_pressed)
 
 	update_breed_cost_display()
 	_switch_view("containment")
@@ -204,6 +208,53 @@ func _init_new_game() -> void:
 	player_strains.append(Strain.create_random(1, "Worm"))
 	codex.add_strain(player_strains[0])
 	codex.add_strain(player_strains[1])
+
+
+## Deletes the save file and resets all game state to a fresh new game.
+## Called when the player clicks the "New Game" button.
+## This is essential during development for testing the new player experience
+## without manually hunting down the save file on disk.
+func _on_new_game_pressed() -> void:
+	# Delete the save file
+	SaveSystem.delete_save()
+
+	# Reset all game state to empty
+	player_strains.clear()
+	zones.clear()
+	strain_deploy_map.clear()
+	player_data = 0.0
+	total_heat = 0.0
+	breed_cooldown = 0.0
+	active_strain_index = 0
+	codex_index = 0
+	active_zone_index = 0
+	_auto_save_timer = 0.0
+	_raid_alert_timer = 0.0
+
+	# Hide any active overlays
+	raid_alert_overlay.visible = false
+	_discovery_active = false
+	discovery_overlay.visible = false
+	discovery_overlay.modulate.a = 1.0
+
+	# Re-enable breed button if it was cooling
+	breed_button.disabled = false
+	breed_button.text = "Breed Strains"
+
+	# Initialize a fresh new game
+	_init_new_game()
+
+	# Update all UI
+	update_strain_display()
+	update_strain_list()
+	update_breeding_dropdowns()
+	update_codex_display()
+	update_zone_display()
+	update_deploy_dropdown()
+	update_breed_cost_display()
+	_switch_view("containment")
+
+	print("New game started -- save deleted and state reset")
 
 
 ## Applies semantic colors to specific labels throughout the UI.
