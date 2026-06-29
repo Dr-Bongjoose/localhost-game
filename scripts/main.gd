@@ -34,9 +34,11 @@ extends Control
 @onready var containment_view: Control = $ScrollContainer/MarginContainer/VBox/ContainmentView
 @onready var strain_name_label: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/StrainNameLabel
 @onready var traits_label: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/TraitsLabel
-@onready var data_label: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/DataLabel
-@onready var income_label: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/IncomeLabel
-@onready var heat_label: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/HeatLabel
+
+# Status bar (always visible, outside the views)
+@onready var data_label: Label = $ScrollContainer/MarginContainer/VBox/StatusBar/StatusHBox/DataLabel
+@onready var income_label: Label = $ScrollContainer/MarginContainer/VBox/StatusBar/StatusHBox/IncomeLabel
+@onready var heat_label: Label = $ScrollContainer/MarginContainer/VBox/StatusBar/StatusHBox/HeatLabel
 
 # Breeding panel references (inside containment view)
 @onready var parent_a_dropdown: OptionButton = $ScrollContainer/MarginContainer/VBox/ContainmentView/BreedPanel/ParentADropdown
@@ -46,7 +48,7 @@ extends Control
 @onready var breed_result_label: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/BreedPanel/BreedResultLabel
 
 # Strain collection references (inside containment view)
-@onready var strain_list_label: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/StrainListLabel
+@onready var strain_list_label: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/StrainListPanel/StrainListLabel
 @onready var prev_button: Button = $ScrollContainer/MarginContainer/VBox/ContainmentView/NavButtons/PrevButton
 @onready var next_button: Button = $ScrollContainer/MarginContainer/VBox/ContainmentView/NavButtons/NextButton
 

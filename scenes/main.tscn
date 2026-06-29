@@ -44,7 +44,7 @@ theme_override_constants/margin_bottom = 30
 [node name="VBox" type="VBoxContainer" parent="ScrollContainer/MarginContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_constants/separation = 12
+theme_override_constants/separation = 20
 
 [node name="HeaderBar" type="HBoxContainer" parent="ScrollContainer/MarginContainer/VBox"]
 layout_mode = 2
@@ -66,54 +66,90 @@ theme_override_font_sizes/font_size = 11
 [node name="TabBar" type="HBoxContainer" parent="ScrollContainer/MarginContainer/VBox"]
 layout_mode = 2
 alignment = 1
+theme_override_constants/separation = 8
 
 [node name="TabContainment" type="Button" parent="ScrollContainer/MarginContainer/VBox/TabBar"]
 layout_mode = 2
-custom_minimum_size = Vector2(120, 35)
+custom_minimum_size = Vector2(120, 40)
 text = "Containment"
 
 [node name="TabCodex" type="Button" parent="ScrollContainer/MarginContainer/VBox/TabBar"]
 layout_mode = 2
-custom_minimum_size = Vector2(120, 35)
+custom_minimum_size = Vector2(120, 40)
 text = "Codex"
 
 [node name="TabZones" type="Button" parent="ScrollContainer/MarginContainer/VBox/TabBar"]
 layout_mode = 2
-custom_minimum_size = Vector2(120, 35)
+custom_minimum_size = Vector2(120, 40)
 text = "Zones"
+
+[node name="StatusBar" type="Panel" parent="ScrollContainer/MarginContainer/VBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 60)
+
+[node name="StatusHBox" type="HBoxContainer" parent="ScrollContainer/MarginContainer/VBox/StatusBar"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 30
+alignment = 1
+
+[node name="DataLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/StatusBar/StatusHBox"]
+layout_mode = 2
+text = "Data: 0"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 24
+theme_override_colors/font_color = Color(0.6, 0.85, 0.6, 1)
+
+[node name="IncomeLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/StatusBar/StatusHBox"]
+layout_mode = 2
+text = "Income: 0.0/sec"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.5, 0.5, 0.5, 1)
+
+[node name="HeatLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/StatusBar/StatusHBox"]
+layout_mode = 2
+text = "Heat: 0.0"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.8, 0.5, 0.3, 1)
 
 [node name="ContainmentView" type="Control" parent="ScrollContainer/MarginContainer/VBox"]
 visible = true
-custom_minimum_size = Vector2(0, 570)
+custom_minimum_size = Vector2(0, 750)
 layout_mode = 2
 
 [node name="StrainNameLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView"]
 layout_mode = 0
 offset_left = 0.0
-offset_top = 0.0
+offset_top = 10.0
 offset_right = 660.0
-offset_bottom = 30.0
+offset_bottom = 50.0
 text = "Strain Name"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 28
 
 [node name="TraitsLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView"]
 layout_mode = 0
-offset_left = 0.0
-offset_top = 32.0
-offset_right = 660.0
-offset_bottom = 138.0
+offset_left = 20.0
+offset_top = 65.0
+offset_right = 640.0
+offset_bottom = 180.0
 text = "Traits will appear here"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 13
+theme_override_font_sizes/font_size = 14
 autowrap_mode = 2
 
 [node name="NavButtons" type="HBoxContainer" parent="ScrollContainer/MarginContainer/VBox/ContainmentView"]
 layout_mode = 0
 offset_left = 150.0
-offset_top = 143.0
+offset_top = 190.0
 offset_right = 510.0
-offset_bottom = 183.0
+offset_bottom = 235.0
 alignment = 1
 
 [node name="PrevButton" type="Button" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/NavButtons"]
@@ -132,59 +168,37 @@ layout_mode = 2
 custom_minimum_size = Vector2(80, 40)
 text = "Next >"
 
-[node name="DataLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView"]
+[node name="StrainListPanel" type="Panel" parent="ScrollContainer/MarginContainer/VBox/ContainmentView"]
 layout_mode = 0
-offset_left = 0.0
-offset_top = 188.0
-offset_right = 660.0
-offset_bottom = 213.0
-text = "Data: 0"
-horizontal_alignment = 1
-theme_override_font_sizes/font_size = 20
+offset_left = 20.0
+offset_top = 250.0
+offset_right = 640.0
+offset_bottom = 380.0
 
-[node name="IncomeLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView"]
+[node name="StrainListLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/StrainListPanel"]
 layout_mode = 0
-offset_left = 0.0
-offset_top = 215.0
-offset_right = 660.0
-offset_bottom = 233.0
-text = "Income: 0.0/sec"
-horizontal_alignment = 1
-theme_override_font_sizes/font_size = 13
-
-[node name="HeatLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView"]
-layout_mode = 0
-offset_left = 0.0
-offset_top = 235.0
-offset_right = 660.0
-offset_bottom = 253.0
-text = "Heat: 0.0"
-horizontal_alignment = 1
-theme_override_font_sizes/font_size = 13
-
-[node name="StrainListLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView"]
-layout_mode = 0
-offset_left = 0.0
-offset_top = 258.0
-offset_right = 660.0
-offset_bottom = 328.0
+offset_left = 15.0
+offset_top = 10.0
+offset_right = 605.0
+offset_bottom = 110.0
 text = "Strains (0):"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 12
+autowrap_mode = 2
 
 [node name="BreedPanel" type="Panel" parent="ScrollContainer/MarginContainer/VBox/ContainmentView"]
 layout_mode = 0
-offset_left = 0.0
-offset_top = 338.0
-offset_right = 660.0
-offset_bottom = 568.0
+offset_left = 20.0
+offset_top = 400.0
+offset_right = 640.0
+offset_bottom = 730.0
 
 [node name="BreedTitle" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/BreedPanel"]
 layout_mode = 0
 offset_left = 10.0
-offset_top = 5.0
-offset_right = 650.0
-offset_bottom = 25.0
+offset_top = 10.0
+offset_right = 610.0
+offset_bottom = 35.0
 text = "--- BREEDING LAB ---"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 16
@@ -192,96 +206,97 @@ theme_override_font_sizes/font_size = 16
 [node name="ParentALabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/BreedPanel"]
 layout_mode = 0
 offset_left = 20.0
-offset_top = 35.0
+offset_top = 50.0
 offset_right = 90.0
-offset_bottom = 55.0
+offset_bottom = 72.0
 text = "Parent A:"
 theme_override_font_sizes/font_size = 13
 
 [node name="ParentADropdown" type="OptionButton" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/BreedPanel"]
 layout_mode = 0
 offset_left = 90.0
-offset_top = 32.0
-offset_right = 640.0
-offset_bottom = 57.0
+offset_top = 47.0
+offset_right = 600.0
+offset_bottom = 75.0
 
 [node name="ParentBLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/BreedPanel"]
 layout_mode = 0
 offset_left = 20.0
-offset_top = 65.0
+offset_top = 85.0
 offset_right = 90.0
-offset_bottom = 85.0
+offset_bottom = 107.0
 text = "Parent B:"
 theme_override_font_sizes/font_size = 13
 
 [node name="ParentBDropdown" type="OptionButton" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/BreedPanel"]
 layout_mode = 0
 offset_left = 90.0
-offset_top = 62.0
-offset_right = 640.0
-offset_bottom = 87.0
+offset_top = 82.0
+offset_right = 600.0
+offset_bottom = 110.0
 
 [node name="BreedCostLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/BreedPanel"]
 layout_mode = 0
 offset_left = 20.0
-offset_top = 95.0
-offset_right = 640.0
-offset_bottom = 115.0
+offset_top = 120.0
+offset_right = 600.0
+offset_bottom = 142.0
 text = "Cost: 0 data"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 13
+theme_override_font_sizes/font_size = 14
 
 [node name="BreedButton" type="Button" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/BreedPanel"]
 layout_mode = 0
-offset_left = 200.0
-offset_top = 120.0
-offset_right = 460.0
-offset_bottom = 155.0
+offset_left = 180.0
+offset_top = 155.0
+offset_right = 440.0
+offset_bottom = 195.0
 text = "Breed Strains"
 
 [node name="BreedResultLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/BreedPanel"]
 layout_mode = 0
 offset_left = 20.0
-offset_top = 160.0
-offset_right = 640.0
-offset_bottom = 210.0
+offset_top = 210.0
+offset_right = 600.0
+offset_bottom = 310.0
 text = ""
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 13
 autowrap_mode = 2
 
 [node name="CodexView" type="Control" parent="ScrollContainer/MarginContainer/VBox"]
 visible = false
-custom_minimum_size = Vector2(0, 400)
+custom_minimum_size = Vector2(0, 550)
 layout_mode = 2
 
 [node name="CodexSummaryLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/CodexView"]
 layout_mode = 0
-offset_left = 0.0
-offset_top = 10.0
-offset_right = 660.0
-offset_bottom = 60.0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 640.0
+offset_bottom = 80.0
 text = "Codex: Empty"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 16
+autowrap_mode = 2
 
 [node name="CodexEntryLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/CodexView"]
 layout_mode = 0
-offset_left = 0.0
-offset_top = 70.0
-offset_right = 660.0
-offset_bottom = 250.0
+offset_left = 40.0
+offset_top = 100.0
+offset_right = 620.0
+offset_bottom = 350.0
 text = "No strains discovered yet."
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 15
 autowrap_mode = 2
 
 [node name="CodexNav" type="HBoxContainer" parent="ScrollContainer/MarginContainer/VBox/CodexView"]
 layout_mode = 0
 offset_left = 150.0
-offset_top = 260.0
+offset_top = 380.0
 offset_right = 510.0
-offset_bottom = 300.0
+offset_bottom = 425.0
 alignment = 1
 
 [node name="CodexPrevButton" type="Button" parent="ScrollContainer/MarginContainer/VBox/CodexView/CodexNav"]
@@ -302,35 +317,35 @@ text = "Next >"
 
 [node name="ZonesView" type="Control" parent="ScrollContainer/MarginContainer/VBox"]
 visible = false
-custom_minimum_size = Vector2(0, 500)
+custom_minimum_size = Vector2(0, 600)
 layout_mode = 2
 
 [node name="ZoneInfoLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ZonesView"]
 layout_mode = 0
-offset_left = 0.0
-offset_top = 10.0
-offset_right = 660.0
-offset_bottom = 130.0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 640.0
+offset_bottom = 150.0
 text = "Zone info will appear here"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 13
+theme_override_font_sizes/font_size = 14
 autowrap_mode = 2
 
 [node name="ZoneHeatBarLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ZonesView"]
 layout_mode = 0
-offset_left = 20.0
-offset_top = 135.0
+offset_left = 30.0
+offset_top = 165.0
 offset_right = 200.0
-offset_bottom = 152.0
+offset_bottom = 185.0
 text = "Zone Heat:"
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 13
 
 [node name="ZoneHeatBar" type="ProgressBar" parent="ScrollContainer/MarginContainer/VBox/ZonesView"]
 layout_mode = 0
-offset_left = 110.0
-offset_top = 135.0
-offset_right = 540.0
-offset_bottom = 155.0
+offset_left = 120.0
+offset_top = 167.0
+offset_right = 530.0
+offset_bottom = 187.0
 max_value = 100.0
 value = 0.0
 show_percentage = false
@@ -338,9 +353,9 @@ show_percentage = false
 [node name="ZoneNav" type="HBoxContainer" parent="ScrollContainer/MarginContainer/VBox/ZonesView"]
 layout_mode = 0
 offset_left = 150.0
-offset_top = 165.0
+offset_top = 210.0
 offset_right = 510.0
-offset_bottom = 205.0
+offset_bottom = 255.0
 alignment = 1
 
 [node name="ZonePrevButton" type="Button" parent="ScrollContainer/MarginContainer/VBox/ZonesView/ZoneNav"]
@@ -361,17 +376,17 @@ text = "Next >"
 
 [node name="ZoneDeployPanel" type="Panel" parent="ScrollContainer/MarginContainer/VBox/ZonesView"]
 layout_mode = 0
-offset_left = 0.0
-offset_top = 215.0
-offset_right = 660.0
-offset_bottom = 380.0
+offset_left = 20.0
+offset_top = 280.0
+offset_right = 640.0
+offset_bottom = 470.0
 
 [node name="DeployTitle" type="Label" parent="ScrollContainer/MarginContainer/VBox/ZonesView/ZoneDeployPanel"]
 layout_mode = 0
 offset_left = 10.0
-offset_top = 5.0
-offset_right = 650.0
-offset_bottom = 25.0
+offset_top = 15.0
+offset_right = 610.0
+offset_bottom = 40.0
 text = "--- DEPLOYMENT ---"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 16
@@ -379,44 +394,44 @@ theme_override_font_sizes/font_size = 16
 [node name="DeployLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ZonesView/ZoneDeployPanel"]
 layout_mode = 0
 offset_left = 20.0
-offset_top = 35.0
+offset_top = 55.0
 offset_right = 120.0
-offset_bottom = 55.0
+offset_bottom = 77.0
 text = "Strain:"
 theme_override_font_sizes/font_size = 13
 
 [node name="DeployDropdown" type="OptionButton" parent="ScrollContainer/MarginContainer/VBox/ZonesView/ZoneDeployPanel"]
 layout_mode = 0
 offset_left = 70.0
-offset_top = 32.0
-offset_right = 640.0
-offset_bottom = 57.0
+offset_top = 52.0
+offset_right = 600.0
+offset_bottom = 80.0
 
 [node name="DeployButton" type="Button" parent="ScrollContainer/MarginContainer/VBox/ZonesView/ZoneDeployPanel"]
 layout_mode = 0
 offset_left = 80.0
-offset_top = 70.0
+offset_top = 100.0
 offset_right = 280.0
-offset_bottom = 105.0
+offset_bottom = 140.0
 text = "Deploy to Zone"
 
 [node name="RecallButton" type="Button" parent="ScrollContainer/MarginContainer/VBox/ZonesView/ZoneDeployPanel"]
 layout_mode = 0
 offset_left = 380.0
-offset_top = 70.0
+offset_top = 100.0
 offset_right = 580.0
-offset_bottom = 105.0
+offset_bottom = 140.0
 text = "Recall from Zone"
 
 [node name="ZoneActionLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ZonesView/ZoneDeployPanel"]
 layout_mode = 0
 offset_left = 20.0
-offset_top = 115.0
-offset_right = 640.0
-offset_bottom = 155.0
+offset_top = 155.0
+offset_right = 600.0
+offset_bottom = 185.0
 text = ""
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 13
 autowrap_mode = 2
 
 [node name="RaidAlertOverlay" type="Panel" parent="."]
