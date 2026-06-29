@@ -355,11 +355,16 @@ func _process(delta: float) -> void:
 	player_data += (idle_income + zone_income) * delta
 
 	# --- GLOBAL HEAT ---
-	# Global heat comes from all strains (idle + deployed)
-	# This is separate from per-zone heat (which triggers raids)
+	# Global heat comes ONLY from strains deployed to zones (they're actively
+	# spreading through hostile territory, drawing attention).
+	# Idle strains sitting in containment don't generate heat -- they're safely
+	# locked in your lab, not interacting with the outside world.
+	# This is separate from per-zone heat (which triggers raids) -- global heat
+	# is a general "how much attention you're attracting" meter.
 	var total_heat_gen: float = 0.0
 	for strain in player_strains:
-		total_heat_gen += strain.get_heat_per_second()
+		if _is_strain_deployed(strain):
+			total_heat_gen += strain.get_heat_per_second()
 	total_heat += total_heat_gen * delta
 	total_heat *= 1.0 - (0.01 * delta)
 
