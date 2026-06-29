@@ -500,7 +500,8 @@ func update_strain_display() -> void:
 
 
 func update_data_display() -> void:
-	data_label.text = "Data: %.0f" % floor(player_data)
+	# Display data as a clean integer (no decimals) -- feels more substantial
+	data_label.text = "Data: %d" % int(player_data)
 
 	# Only zone income counts (idle bugs earn nothing)
 	var z_income: float = 0.0

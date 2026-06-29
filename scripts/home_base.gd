@@ -47,7 +47,10 @@ extends RefCounted
 const HOME_BASE_CAPACITY: int = 3
 
 ## Multiplier for data reward calculation.
-const REWARD_MULTIPLIER: float = 50.0
+## Was 50 -- too low (defense earned 20-50x less than zone income).
+## At 500: a resilience 0.5 bug surviving a 0.3 attack earns 75 data.
+## That's comparable to a weak zone deployment, making defense viable.
+const REWARD_MULTIPLIER: float = 500.0
 
 ## Base attack interval (seconds) when heat is 0.
 const ATTACK_INTERVAL_BASE: float = 60.0

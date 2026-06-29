@@ -107,11 +107,10 @@ enum Personality {
 
 ## Returns the data (currency) this strain generates per second.
 ## Formula: payload is the base, speed modifies it.
+## A strain with 0.2 payload and 0.5 speed earns: 0.2 * 5 * (0.5 + 0.5) = 1.0
 ## A strain with 0.5 payload and 0.5 speed earns: 0.5 * 5 * (0.5 + 0.5) = 2.5
 ## A strain with 0.8 payload and 0.7 speed earns: 0.8 * 5 * (0.7 + 0.5) = 4.8
 ## The * 5 is a base multiplier we can tune for game balance.
-## (Was * 10 -- halved to make data accumulate slower so breeding feels like
-## a real investment, not something you can spam.)
 func get_income_per_second() -> float:
 	# Base income from payload (how much data it can extract)
 	var base_income: float = payload * 5.0
@@ -239,7 +238,7 @@ static func create_seed() -> Strain:
 	strain.strain_name = "Seed-001"
 	strain.stealth = 0.4
 	strain.speed = 0.5
-	strain.payload = 0.3   # Low payload - you'll want to breed for better
+	strain.payload = 0.2   # Very low payload - first breed should feel like a big upgrade
 	strain.resilience = 0.5
 	strain.stability = 0.8  # High stability - safe for first breeding
 	strain.personality = Personality.NONE  # Basic - no personality yet

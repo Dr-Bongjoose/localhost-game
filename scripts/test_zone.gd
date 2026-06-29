@@ -26,20 +26,20 @@ func _init() -> void:
 	var corporate = Zone.create(Zone.ZoneType.CORPORATE)
 	var gov = Zone.create(Zone.ZoneType.GOVERNMENT)
 
-	if consumer.zone_name == "Consumer Network" and consumer.data_value == 1.5:
-		print("  PASS: Consumer Network created correctly (payout=1.5x)")
+	if consumer.zone_name == "Consumer Network" and consumer.data_value == 2.0:
+		print("  PASS: Consumer Network created correctly (payout=2.0x)")
 	else:
 		print("  FAIL: Consumer Network properties wrong")
 		all_passed = false
 
-	if corporate.data_value == 2.5 and corporate.detection_rate == 1.0:
-		print("  PASS: Corporate Server created correctly (payout=2.5x, det=1.0)")
+	if corporate.data_value == 3.0 and corporate.detection_rate == 1.0:
+		print("  PASS: Corporate Server created correctly (payout=3.0x, det=1.0)")
 	else:
 		print("  FAIL: Corporate Server properties wrong")
 		all_passed = false
 
-	if gov.data_value == 4.0 and gov.detection_threshold == 30.0 and gov.capacity == 1:
-		print("  PASS: Government Network created correctly (payout=4.0x, threshold=30, cap=1)")
+	if gov.data_value == 5.0 and gov.detection_threshold == 30.0 and gov.capacity == 1:
+		print("  PASS: Government Network created correctly (payout=5.0x, threshold=30, cap=1)")
 	else:
 		print("  FAIL: Government Network properties wrong")
 		all_passed = false

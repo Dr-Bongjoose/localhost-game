@@ -98,21 +98,21 @@ func _init_type_properties() -> void:
 	match zone_type:
 		ZoneType.CONSUMER:
 			zone_name = "Consumer Network"
-			data_value = 1.5         # 50% bonus income over idle
+			data_value = 2.0         # 2x income -- safe starting zone
 			detection_rate = 0.5      # Heat rises slowly
 			detection_threshold = 80.0  # Tolerant zone, raids are rare
-			capacity = 3             # Can hold 3 strains
+			capacity = 3             # Can hold 3 bugs
 
 		ZoneType.CORPORATE:
 			zone_name = "Corporate Server"
-			data_value = 2.5         # 2.5x income
+			data_value = 3.0         # 3x income -- moderate risk/reward
 			detection_rate = 1.0      # Standard heat rate
 			detection_threshold = 50.0  # Moderate raid risk
 			capacity = 2
 
 		ZoneType.GOVERNMENT:
 			zone_name = "Government Network"
-			data_value = 4.0         # 4x income -- very lucrative
+			data_value = 5.0         # 5x income -- very lucrative, very risky
 			detection_rate = 2.0      # Heat rises fast
 			detection_threshold = 30.0  # Low threshold = raids happen quickly
 			capacity = 1             # Only room for 1 strain

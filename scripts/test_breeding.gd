@@ -87,9 +87,9 @@ func _init() -> void:
 	# Test 4: get_breed_cost() returns sensible values
 	print("\n[4] Testing get_breed_cost()...")
 	var cost: int = Breeding.get_breed_cost(parent_a, parent_b)
-	# Both parents gen 1 and 2, max_gen=2, so cost = 150 + 2*50 = 250
+	# Both parents gen 1 and 2, max_gen=2, so cost = 200 + 2*100 = 400
 	if cost > 0 and cost < 1000:
-		print("  PASS: breed cost = %d (expected ~250)" % cost)
+		print("  PASS: breed cost = %d (expected ~400)" % cost)
 	else:
 		print("  FAIL: breed cost = %d (seems wrong)" % cost)
 		all_passed = false

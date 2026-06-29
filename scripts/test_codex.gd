@@ -147,16 +147,15 @@ func _init() -> void:
 
 	# Test 7: get_count_by_rarity()
 	print("\n[7] Testing get_count_by_rarity()...")
-	# In the codex now: seed_strain (score 2.5 -> COMMON), mid_strain (score 2.5 -> UNCOMMON)
-	# seed_strain: 0.4+0.5+0.3+0.5+0.8 = 2.5, no personality, gen 1 -> 2.5 -> COMMON (2.5 < 2.5 is false!)
-	# Wait: 2.5 is NOT < 2.5, so seed falls through to UNCOMMON too.
-	# Both seed and mid have score 2.5, both -> UNCOMMON
+	# In the codex now: seed_strain (score 2.4 -> COMMON), mid_strain (score 2.5 -> UNCOMMON)
+	# seed_strain: 0.4+0.5+0.2+0.5+0.8 = 2.4, no personality, gen 1 -> 2.4 < 2.5 -> COMMON
+	# mid_strain: 0.5*5 = 2.5, no personality, gen 1 -> 2.5 is NOT < 2.5 -> UNCOMMON
 	var common_count = c.get_count_by_rarity(Codex.Rarity.COMMON)
 	var uncommon_count = c.get_count_by_rarity(Codex.Rarity.UNCOMMON)
-	if common_count == 0 and uncommon_count == 2:
+	if common_count == 1 and uncommon_count == 1:
 		print("  PASS: Common=%d, Uncommon=%d" % [common_count, uncommon_count])
 	else:
-		print("  FAIL: expected Common=0 Uncommon=2, got Common=%d Uncommon=%d" % [common_count, uncommon_count])
+		print("  FAIL: expected Common=1 Uncommon=1, got Common=%d Uncommon=%d" % [common_count, uncommon_count])
 		all_passed = false
 
 	# Test 8: Sorting by rarity
