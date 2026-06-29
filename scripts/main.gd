@@ -410,6 +410,12 @@ func _process(delta: float) -> void:
 	update_data_display()
 	if current_view == "zones":
 		update_zone_display()
+	# Re-check breed button affordability every frame on containment tab.
+	# Without this, the button stays disabled after data ticks past the cost
+	# threshold -- it was only being re-checked after specific events (breeding,
+	# raids, new game) but not when data naturally accumulated.
+	if current_view == "containment":
+		update_breed_cost_display()
 
 	# --- AUTO-SAVE ---
 	# Count up toward the next auto-save. When the timer hits the interval,
