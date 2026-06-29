@@ -263,7 +263,7 @@ func _on_new_game_pressed() -> void:
 
 	# Re-enable breed button if it was cooling
 	breed_button.disabled = false
-	breed_button.text = "Breed Specimens"
+	breed_button.text = "Breed Bugs"
 
 	# Initialize a fresh new game
 	_init_new_game()
@@ -358,9 +358,9 @@ func _apply_label_colors() -> void:
 
 func _process(delta: float) -> void:
 	# --- IDLE INCOME ---
-	# Specimens that are NOT deployed earn ZERO data. They're sitting in
+	# Bugs that are NOT deployed earn ZERO data. They're sitting in
 	# containment doing nothing -- no income, no heat. The only way to earn
-	# data is to actively deploy specimens to zones.
+	# data is to actively deploy bugs to zones.
 	# This makes every deployment a meaningful decision, not just "passive income."
 	# (Previously idle strains earned full income -- that made deployment feel
 	# optional and the game felt like a waiting simulator.)
@@ -400,7 +400,7 @@ func _process(delta: float) -> void:
 		if breed_cooldown <= 0.0:
 			breed_cooldown = 0.0
 			breed_button.disabled = false
-			breed_button.text = "Breed Specimens"
+			breed_button.text = "Breed Bugs"
 
 			# --- RAID NOTIFICATIONS ---
 	if not raid_notifications.is_empty():
@@ -484,7 +484,7 @@ func _on_tab_zones_pressed() -> void:
 
 func update_strain_display() -> void:
 	if player_strains.is_empty():
-		strain_name_label.text = "No specimens"
+		strain_name_label.text = "No bugs"
 		traits_label.text = ""
 		return
 	var strain: Strain = player_strains[active_strain_index]
@@ -502,17 +502,17 @@ func update_strain_display() -> void:
 func update_data_display() -> void:
 	data_label.text = "Data: %.0f" % floor(player_data)
 
-	# Only zone income counts (idle specimens earn nothing)
+	# Only zone income counts (idle bugs earn nothing)
 	var z_income: float = 0.0
 	for zone in zones:
 		z_income += zone.get_zone_income()
 
-	income_label.text = "Income: %.1f/sec (%d specimens)" % [z_income, player_strains.size()]
+	income_label.text = "Income: %.1f/sec (%d bugs)" % [z_income, player_strains.size()]
 	heat_label.text = "Heat: %.1f" % total_heat
 
 
 func update_strain_list() -> void:
-	var list_text: String = "Specimens (%d):\n" % player_strains.size()
+	var list_text: String = "Bugs (%d):\n" % player_strains.size()
 	for i in range(player_strains.size()):
 		var strain: Strain = player_strains[i]
 		var marker: String = "  "
@@ -530,30 +530,53 @@ func update_strain_list() -> void:
 func update_breeding_dropdowns() -> void:
 	parent_a_dropdown.clear()
 	parent_b_dropdown.clear()
+	# Only show bugs that are at home base (not deployed, not defending)
+	# You can only breed bugs that are physically in your containment facility
+	var available: Array[int] = []
 	for i in range(player_strains.size()):
+		var strain: Strain = player_strains[i]
+		if not _is_strain_deployed(strain) and not home_base.is_defender(strain):
+			available.append(i)
+
+	for i in available:
 		var strain: Strain = player_strains[i]
 		var label: String = "%s (Gen %d)" % [strain.strain_name, strain.generation]
 		parent_a_dropdown.add_item(label, i)
 		parent_b_dropdown.add_item(label, i)
-	parent_a_dropdown.select(0)
-	if player_strains.size() > 1:
-		parent_b_dropdown.select(1)
-	else:
-		parent_b_dropdown.select(0)
+
+	if available.size() > 0:
+		parent_a_dropdown.select(0)
+		if available.size() > 1:
+			parent_b_dropdown.select(1)
+		else:
+			parent_b_dropdown.select(0)
 
 
 func update_breed_cost_display() -> void:
-	if player_strains.size() < 2:
-		breed_cost_label.text = "Need at least 2 specimens to breed"
+	# Count how many bugs are available for breeding (not deployed, not defending)
+	var available_count: int = 0
+	for strain in player_strains:
+		if not _is_strain_deployed(strain) and not home_base.is_defender(strain):
+			available_count += 1
+
+	if available_count < 2:
+		if player_strains.size() < 2:
+			breed_cost_label.text = "Need at least 2 bugs to breed"
+		else:
+			breed_cost_label.text = "Only %d bug(s) at home -- recall some to breed" % available_count
 		breed_button.disabled = true
 		return
 	var idx_a: int = parent_a_dropdown.get_selected_id()
 	var idx_b: int = parent_b_dropdown.get_selected_id()
+	if idx_a < 0 or idx_b < 0:
+		breed_cost_label.text = "No bugs selected"
+		breed_button.disabled = true
+		return
 	var strain_a: Strain = player_strains[idx_a]
 	var strain_b: Strain = player_strains[idx_b]
 	var cost: int = Breeding.get_breed_cost(strain_a, strain_b)
 	if idx_a == idx_b:
-		breed_cost_label.text = "Select two DIFFERENT specimens"
+		breed_cost_label.text = "Select two DIFFERENT bugs"
 		breed_button.disabled = true
 	elif player_data < cost:
 		breed_cost_label.text = "Cost: %d data (not enough!)" % cost
@@ -572,10 +595,10 @@ func _on_breed_button_pressed() -> void:
 	var idx_b: int = parent_b_dropdown.get_selected_id()
 
 	if idx_a == idx_b:
-		breed_result_label.text = "Cannot breed a specimen with itself!"
+		breed_result_label.text = "Cannot breed a bug with itself!"
 		return
 	if player_strains.size() < 2:
-		breed_result_label.text = "Need at least 2 specimens!"
+		breed_result_label.text = "Need at least 2 bugs!"
 		return
 
 	var parent_a: Strain = player_strains[idx_a]
@@ -663,7 +686,7 @@ func _on_next_button_pressed() -> void:
 func update_codex_display() -> void:
 	codex_summary_label.text = codex.get_summary()
 	if codex.get_count() == 0:
-		codex_entry_label.text = "No specimens discovered yet.\nBreed specimens to fill your codex!"
+		codex_entry_label.text = "No bugs discovered yet.\nBreed bugs to fill your codex!"
 		codex_counter_label.text = "0 / 0"
 		return
 	codex_index = clampi(codex_index, 0, codex.get_count() - 1)
@@ -731,41 +754,50 @@ func update_zone_display() -> void:
 	heat_fill.set_corner_radius_all(2)
 	zone_heat_bar.add_theme_stylebox_override("fill", heat_fill)
 
-	# Update deploy button state
+	# Update deploy/recall button state
 	var selected_strain: Strain = _get_selected_deploy_strain()
-	if selected_strain == null:
-		zone_deploy_button.disabled = true
+	if zone.deployed_strains.is_empty():
+		# No bugs deployed in this zone
 		zone_recall_button.disabled = true
-		zone_action_label.text = "No specimens available to deploy"
-	elif zone.has_strain(selected_strain):
-		zone_deploy_button.disabled = true
-		zone_recall_button.disabled = false
-		zone_action_label.text = "%s is deployed here" % selected_strain.strain_name
-	elif _is_strain_deployed(selected_strain):
-		zone_deploy_button.disabled = true
-		zone_recall_button.disabled = true
-		zone_action_label.text = "%s is deployed elsewhere. Recall it first." % selected_strain.strain_name
-	elif zone.is_full():
-		zone_deploy_button.disabled = true
-		zone_recall_button.disabled = true
-		zone_action_label.text = "Zone is full (%d/%d)" % [zone.deployed_strains.size(), zone.capacity]
+		if selected_strain == null:
+			zone_deploy_button.disabled = true
+			if player_strains.is_empty():
+				zone_action_label.text = "No bugs available to deploy"
+			else:
+				zone_action_label.text = "All bugs are deployed or defending"
+		elif zone.is_full():
+			zone_deploy_button.disabled = true
+			zone_action_label.text = "Zone is full (%d/%d)" % [zone.deployed_strains.size(), zone.capacity]
+		else:
+			zone_deploy_button.disabled = false
+			zone_action_label.text = "Ready to deploy %s" % selected_strain.strain_name
 	else:
-		zone_deploy_button.disabled = false
-		zone_recall_button.disabled = true
-		zone_action_label.text = "Ready to deploy %s" % selected_strain.strain_name
+		# Bugs are deployed in this zone -- can recall them
+		zone_recall_button.disabled = false
+		zone_recall_button.text = "Recall All (%d)" % zone.deployed_strains.size()
+		if selected_strain == null or zone.is_full():
+			zone_deploy_button.disabled = true
+			if selected_strain == null and not player_strains.is_empty():
+				zone_action_label.text = "All available bugs deployed"
+			elif zone.is_full():
+				zone_action_label.text = "Zone is full (%d/%d)" % [zone.deployed_strains.size(), zone.capacity]
+			else:
+				zone_action_label.text = "No bugs to deploy"
+		else:
+			zone_deploy_button.disabled = false
+			zone_action_label.text = "Ready to deploy %s" % selected_strain.strain_name
 
 
 func update_deploy_dropdown() -> void:
 	zone_deploy_dropdown.clear()
+	# Only show bugs that are available (not deployed to any zone, not defending)
+	# Deployed bugs are recalled via the "Recall All" button instead
 	for i in range(player_strains.size()):
 		var strain: Strain = player_strains[i]
-		var label: String = "%s (Gen %d)" % [strain.strain_name, strain.generation]
-		var dep_zone: Zone = _get_strain_zone(strain)
-		if dep_zone != null:
-			label += " [%s]" % dep_zone.get_type_name()
-		zone_deploy_dropdown.add_item(label, i)
-	if player_strains.size() > 0:
-		zone_deploy_dropdown.select(0)
+		if not _is_strain_deployed(strain) and not home_base.is_defender(strain):
+			var label: String = "%s (Gen %d)" % [strain.strain_name, strain.generation]
+			zone_deploy_dropdown.add_item(label, i)
+	# No auto-select needed -- the zone display handles button state
 
 
 func _get_selected_deploy_strain() -> Strain:
@@ -793,18 +825,21 @@ func _on_deploy_pressed() -> void:
 
 
 func _on_recall_pressed() -> void:
-	var strain: Strain = _get_selected_deploy_strain()
-	if strain == null:
-		return
+	# Recall ALL bugs from the current zone (since deployed bugs aren't in the dropdown)
 	var zone: Zone = zones[active_zone_index]
-	if zone.recall(strain):
-		strain_deploy_map.erase(strain.strain_name)
-		zone_action_label.text = "Recalled %s from %s" % [strain.strain_name, zone.zone_name]
+	var recalled_count: int = 0
+	for strain in zone.deployed_strains.duplicate():
+		if zone.recall(strain):
+			strain_deploy_map.erase(strain.strain_name)
+			recalled_count += 1
+	if recalled_count > 0:
+		zone_action_label.text = "Recalled %d bug(s) from %s" % [recalled_count, zone.zone_name]
+		zone_recall_button.text = "Recall from Zone"
 		update_strain_display()
 		update_strain_list()
 		update_deploy_dropdown()
 	else:
-		zone_action_label.text = "That strain isn't in this zone"
+		zone_action_label.text = "No bugs to recall from this zone"
 
 
 func _on_zone_prev_pressed() -> void:
@@ -916,12 +951,12 @@ func update_home_base_display() -> void:
 		return
 	home_base_info.text = home_base.get_summary()
 
-	# Update button states based on selected specimen
+	# Update button states based on selected bug
 	var selected: Strain = _get_selected_defender_strain()
 	if selected == null:
 		assign_defender_button.disabled = true
 		recall_defender_button.disabled = true
-		home_base_action_label.text = "No specimens available"
+		home_base_action_label.text = "No bugs available"
 	elif home_base.is_defender(selected):
 		assign_defender_button.disabled = true
 		recall_defender_button.disabled = false
@@ -940,22 +975,18 @@ func update_home_base_display() -> void:
 		home_base_action_label.text = "Ready to assign %s" % selected.strain_name
 
 
-## Populates the defender dropdown with available specimens.
+## Populates the defender dropdown with available bugs (not deployed, not already defending).
 func update_defender_dropdown() -> void:
 	defender_dropdown.clear()
 	for i in range(player_strains.size()):
 		var strain: Strain = player_strains[i]
-		var label: String = "%s (Gen %d)" % [strain.strain_name, strain.generation]
-		if home_base != null and home_base.is_defender(strain):
-			label += " [Defender]"
-		elif _is_strain_deployed(strain):
-			label += " [%s]" % _get_strain_zone(strain).get_type_name()
-		defender_dropdown.add_item(label, i)
-	if player_strains.size() > 0:
-		defender_dropdown.select(0)
+		# Only show bugs that are at home base and not already defending
+		if not _is_strain_deployed(strain) and not home_base.is_defender(strain):
+			var label: String = "%s (Gen %d)" % [strain.strain_name, strain.generation]
+			defender_dropdown.add_item(label, i)
 
 
-## Returns the specimen currently selected in the defender dropdown.
+## Returns the bug currently selected in the defender dropdown.
 func _get_selected_defender_strain() -> Strain:
 	if player_strains.is_empty():
 		return null
@@ -965,7 +996,7 @@ func _get_selected_defender_strain() -> Strain:
 	return player_strains[idx]
 
 
-## Assigns the selected specimen as a home base defender.
+## Assigns the selected bug as a home base defender.
 func _on_assign_defender_pressed() -> void:
 	var strain: Strain = _get_selected_defender_strain()
 	if strain == null:
@@ -980,19 +1011,18 @@ func _on_assign_defender_pressed() -> void:
 		home_base_action_label.text = "Failed to assign (base full?)"
 
 
-## Recalls the selected specimen from defender duty.
+## Recalls all defenders from home base defense duty.
 func _on_recall_defender_pressed() -> void:
-	var strain: Strain = _get_selected_defender_strain()
-	if strain == null:
+	if home_base.defenders.is_empty():
+		home_base_action_label.text = "No defenders to recall"
 		return
-	if home_base.recall_defender(strain):
-		home_base_action_label.text = "Recalled %s from defense" % strain.strain_name
-		update_strain_display()
-		update_strain_list()
-		update_defender_dropdown()
-		update_home_base_display()
-	else:
-		home_base_action_label.text = "That specimen isn't defending"
+	var count: int = home_base.defenders.size()
+	home_base.defenders.clear()
+	home_base_action_label.text = "Recalled %d defender(s)" % count
+	update_strain_display()
+	update_strain_list()
+	update_defender_dropdown()
+	update_home_base_display()
 
 
 ## Resolves a home base attack: defenders roll resilience vs attack strength.

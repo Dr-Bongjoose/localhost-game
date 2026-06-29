@@ -181,7 +181,7 @@ offset_left = 15.0
 offset_top = 10.0
 offset_right = 605.0
 offset_bottom = 110.0
-text = "Strains (0):"
+text = "Bugs (0):"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 12
 autowrap_mode = 2
@@ -245,7 +245,7 @@ offset_left = 110.0
 offset_top = 160.0
 offset_right = 280.0
 offset_bottom = 195.0
-text = "Recall Defender"
+text = "Recall All Defenders"
 
 [node name="HomeBaseActionLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel"]
 layout_mode = 0
@@ -493,7 +493,7 @@ offset_left = 380.0
 offset_top = 100.0
 offset_right = 580.0
 offset_bottom = 140.0
-text = "Recall from Zone"
+text = "Recall All from Zone"
 
 [node name="ZoneActionLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ZonesView/ZoneDeployPanel"]
 layout_mode = 0
