@@ -34,6 +34,7 @@ extends Control
 @onready var containment_view: Control = $ScrollContainer/MarginContainer/VBox/ContainmentView
 @onready var strain_name_label: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/StrainNameLabel
 @onready var traits_label: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/TraitsLabel
+@onready var bug_icon: TextureRect = $ScrollContainer/MarginContainer/VBox/ContainmentView/BugIcon
 
 # Status bar (always visible, outside the views)
 @onready var data_label: Label = $ScrollContainer/MarginContainer/VBox/StatusBar/StatusHBox/DataLabel
@@ -63,6 +64,7 @@ extends Control
 # Zones view nodes
 @onready var zones_view: Control = $ScrollContainer/MarginContainer/VBox/ZonesView
 @onready var zone_info_label: Label = $ScrollContainer/MarginContainer/VBox/ZonesView/ZoneInfoLabel
+@onready var zone_background: TextureRect = $ScrollContainer/MarginContainer/VBox/ZonesView/ZoneBackground
 @onready var zone_nav_prev: Button = $ScrollContainer/MarginContainer/VBox/ZonesView/ZoneNav/ZonePrevButton
 @onready var zone_nav_next: Button = $ScrollContainer/MarginContainer/VBox/ZonesView/ZoneNav/ZoneNextButton
 @onready var zone_counter_label: Label = $ScrollContainer/MarginContainer/VBox/ZonesView/ZoneNav/ZoneCounterLabel
@@ -88,6 +90,10 @@ extends Control
 @onready var discovery_mutations: Label = $DiscoveryOverlay/DiscoveryMutations
 @onready var discovery_hint: Label = $DiscoveryOverlay/DiscoveryHint
 @onready var discovery_bg: ColorRect = $DiscoveryOverlay/DiscoveryBG
+@onready var discovery_image: TextureRect = $DiscoveryOverlay/DiscoveryImage
+
+# Lab background texture (dim art behind everything)
+@onready var lab_background: TextureRect = $LabBackground
 
 # Home Base panel references (inside containment view)
 @onready var home_base_info: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel/HomeBaseInfo
@@ -151,6 +157,10 @@ func _ready() -> void:
 	# Individual labels can still override with theme_override_colors for special
 	# cases (like the data counter using a brighter green).
 	theme = LabTheme.create()
+	
+	# --- LOAD LAB BACKGROUND ART ---
+	# A dim, dark biological lab image behind everything for atmosphere.
+	lab_background.texture = load("res://assets/ui/ui_lab_background.png")
 
 	# --- APPLY SEMANTIC COLORS TO SPECIFIC LABELS ---
 	# The theme sets a default text color, but certain labels need special colors
@@ -486,9 +496,23 @@ func update_strain_display() -> void:
 	if player_strains.is_empty():
 		strain_name_label.text = "No bugs"
 		traits_label.text = ""
+		bug_icon.texture = load("res://assets/bugs/bug_seed.png")
 		return
 	var strain: Strain = player_strains[active_strain_index]
 	strain_name_label.text = strain.strain_name
+	
+	# --- LOAD BUG ICON BASED ON PERSONALITY ---
+	# Each personality type has a different visual representation.
+	# The art was AI-generated with different aesthetics for each type.
+	match strain.personality:
+		Strain.Personality.VOLATILE:
+			bug_icon.texture = load("res://assets/bugs/bug_volatile.png")
+		Strain.Personality.SYMBIOTIC, Strain.Personality.DORMANT:
+			bug_icon.texture = load("res://assets/bugs/bug_steady.png")
+		Strain.Personality.PARASITIC:
+			bug_icon.texture = load("res://assets/bugs/bug_cunning.png")
+		Strain.Personality.AGGRESSIVE, Strain.Personality.NONE:
+			bug_icon.texture = load("res://assets/bugs/bug_seed.png")
 	# Add deployment status to the summary
 	var summary: String = strain.get_summary()
 	var dep_zone: Zone = _get_strain_zone(strain)
@@ -727,6 +751,18 @@ func update_zone_display() -> void:
 	var zone: Zone = zones[active_zone_index]
 	zone_info_label.text = zone.get_summary()
 	zone_counter_label.text = "%d / %d" % [active_zone_index + 1, zones.size()]
+	
+	# --- LOAD ZONE BACKGROUND BASED ON ZONE TYPE ---
+	# Each zone type has a distinct visual showing the network environment.
+	match zone.zone_type:
+		Zone.ZoneType.CONSUMER:
+			zone_background.texture = load("res://assets/zones/zone_consumer.png")
+		Zone.ZoneType.CORPORATE:
+			zone_background.texture = load("res://assets/zones/zone_corporate.png")
+		Zone.ZoneType.GOVERNMENT:
+			zone_background.texture = load("res://assets/zones/zone_government.png")
+		_:
+			zone_background.texture = load("res://assets/zones/zone_consumer.png")
 
 	# --- ZONE HEAT BAR ---
 	# Show the zone's current heat as a progress bar from 0 to the zone's
@@ -1085,6 +1121,9 @@ func _resolve_home_base_attack() -> void:
 ## Shows the discovery moment overlay with animated sequential reveals.
 func _show_discovery_moment(child: Strain, rarity: Codex.Rarity, mutations: Dictionary) -> void:
 	# --- SET UP THE CONTENT ---
+	# Load the discovery moment artwork
+	discovery_image.texture = load("res://assets/ui/discovery_moment.png")
+	
 	discovery_name.text = "%s (Generation %d)" % [child.strain_name, child.generation]
 
 	# Rarity with biological color
@@ -1119,6 +1158,7 @@ func _show_discovery_moment(child: Strain, rarity: Codex.Rarity, mutations: Dict
 
 	# --- RESET ALL ELEMENTS TO INVISIBLE ---
 	# modulate.a = 0 means fully transparent. We fade them in with tweens.
+	discovery_image.modulate.a = 0.0
 	discovery_title.modulate.a = 0.0
 	discovery_name.modulate.a = 0.0
 	discovery_rarity.modulate.a = 0.0
@@ -1138,7 +1178,10 @@ func _show_discovery_moment(child: Strain, rarity: Codex.Rarity, mutations: Dict
 
 	var tween: Tween = create_tween()
 
-	# 1. Dark background fades in (0 to 1 alpha over 0.3s)
+	# 1. Discovery image fades in (0 to 1 alpha over 0.5s) -- the visual "birth" moment
+	tween.tween_property(discovery_image, "modulate:a", 1.0, 0.5)
+
+	# 2. Dark background fades in (0 to 1 alpha over 0.3s)
 	tween.tween_property(discovery_bg, "modulate:a", 1.0, 0.3)
 
 	# 2. Title fades in (0.3s delay, 0.4s duration)
