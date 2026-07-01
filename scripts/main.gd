@@ -361,6 +361,21 @@ func _apply_label_colors() -> void:
 	var zone_action: Label = $ScrollContainer/MarginContainer/VBox/ZonesView/ZoneDeployPanel/ZoneActionLabel
 	zone_action.add_theme_color_override("font_color", LabTheme.TEXT_RESULT)
 
+	# --- SECTION PANEL STYLING (v2) ---
+	# Each major panel gets an accent-colored border to give the UI personality.
+	# You can tell which section you're in by the color of the panel border.
+	var breed_panel: Panel = $ScrollContainer/MarginContainer/VBox/ContainmentView/BreedPanel
+	breed_panel.add_theme_stylebox_override("panel", LabTheme.make_section_panel(LabTheme.ACCENT_BREED))
+
+	var home_base_panel: Panel = $ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel
+	home_base_panel.add_theme_stylebox_override("panel", LabTheme.make_section_panel(LabTheme.ACCENT_HOME))
+
+	var strain_list_panel: Panel = $ScrollContainer/MarginContainer/VBox/ContainmentView/StrainListPanel
+	strain_list_panel.add_theme_stylebox_override("panel", LabTheme.make_section_panel(LabTheme.ACCENT_CODEX))
+
+	var deploy_panel: Panel = $ScrollContainer/MarginContainer/VBox/ZonesView/ZoneDeployPanel
+	deploy_panel.add_theme_stylebox_override("panel", LabTheme.make_section_panel(LabTheme.ACCENT_DEPLOY))
+
 
 # ---------------------------------------------------------------------------
 # MAIN LOOP
