@@ -185,6 +185,7 @@ func resolve_attack(global_heat: float) -> Dictionary:
 	var defender_results: Array = []
 	var total_reward: float = 0.0
 	var any_survived: bool = false
+	var survivors: Array[Strain] = []  # Track defenders that survive
 
 	for strain in defenders:
 		# Roll: resilience + random luck (same formula as zone raid survival)
@@ -197,6 +198,9 @@ func resolve_attack(global_heat: float) -> Dictionary:
 			reward = attack_strength * strain.resilience * REWARD_MULTIPLIER
 			total_reward += reward
 			any_survived = true
+			survivors.append(strain)  # This defender lives to fight another day
+		else:
+			print("Defender %s overwhelmed! (roll %.2f vs attack %.2f)" % [strain.strain_name, roll, attack_strength])
 
 		defender_results.append({
 			"strain": strain,
@@ -204,6 +208,9 @@ func resolve_attack(global_heat: float) -> Dictionary:
 			"roll": roll,
 			"reward": reward,
 		})
+
+	# Replace defenders array with only the survivors
+	defenders = survivors
 
 	# --- DETERMINE BREACH ---
 	# A breach happens if NO defenders survived (including having zero defenders).
