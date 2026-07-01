@@ -30,9 +30,9 @@
 class_name Breeding
 extends RefCounted
 
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- 
 # MUTATION EVENT TYPES
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- 
 # Each mutation is a NAMED EVENT, not just an anonymous trait shift.
 # This makes every breed a roll of the dice with dramatic outcomes.
 # Events are weighted -- common ones happen often, rare ones are exciting.
@@ -60,6 +60,37 @@ enum MutationType {
 	STABILITY_COLLAPSE,    ## Stability crashes -- future breeding goes wild
 	HYPERGENESIS,     ## ALL traits shift up slightly (the jackpot)
 }
+
+# --------------------------------------------------------------------------- 
+# BREEDING RISK MECHANICS (Phase 3)
+# --------------------------------------------------------------------------- 
+# Breeding carries risks beyond just mutation. These three mechanics add
+# strategic depth: breeding is an investment with real risk.
+#
+# 1. BREEDING FAILURE: The attempt fails entirely. Data cost is lost,
+#    no child produced. Chance increases with generation gap and low stability.
+# 2. DEGRADED OFFSPRING: Child is produced but all traits are reduced by
+#    10-20%. This represents a "runty" offspring. Mutation events can still
+#    occur on degraded offspring (rare but possible).
+# 3. GENETIC DAMAGE: One parent takes permanent stability damage from the
+#    stress of breeding. This modifies the parent IN PLACE in the player's
+#    collection -- a permanent scar on the parent strain.
+
+# Result enum so main.gd can distinguish failure types
+# SELF_BREEDING = tried to breed a strain with itself (UI prevents this)
+# FAILURE = breeding attempt failed (data lost, no child)
+# SUCCESS = child produced (may be degraded or have genetic damage to parent)
+enum BreedResult {
+	SUCCESS,
+	SELF_BREEDING,
+	FAILURE,
+}
+
+# Static vars to communicate breeding results back to main.gd
+# Since breed() returns only the child (or null), we use static vars
+# to communicate additional outcome info.
+static var last_breed_result: BreedResult = BreedResult.SUCCESS
+static var last_genetic_damage: Dictionary = {}  # {"parent_name": String, "stability_lost": float, "new_stability": float}
 
 # Weight table -- how likely each event is when a mutation triggers.
 # Total weight = 100, so weights are effectively percentages.
@@ -102,14 +133,39 @@ static func get_breed_cost(parent_a: Strain, parent_b: Strain) -> int:
 
 ## Combines two parent strains and returns a new child strain.
 ## Returns null if the parents are the same strain (you can't breed a strain
-## with itself -- that would be cloning, not breeding).
+## with itself -- that would be cloning, not breeding), OR if the breeding
+## attempt fails entirely (Breeding Failure risk mechanic).
+## Check Breeding.last_breed_result after calling to distinguish:
+##   SUCCESS = child produced (may be degraded, parent may have genetic damage)
+##   SELF_BREEDING = tried to breed a strain with itself (UI prevents this)
+##   FAILURE = breeding attempt failed (data lost, no child produced)
 static func breed(parent_a: Strain, parent_b: Strain) -> Strain:
-	# Safety check: can't breed a strain with itself
+	# Reset the result vars for this breeding attempt
+	last_breed_result = BreedResult.SUCCESS
+	last_genetic_damage = {}
+
+	# Step 1: Check self-breeding -> set last_breed_result = SELF_BREEDING, return null
 	if parent_a == parent_b:
 		push_error("Breeding: cannot breed a strain with itself!")
+		last_breed_result = BreedResult.SELF_BREEDING
 		return null
 
-	# Create the child strain
+	# Step 2: Check breeding failure -> set last_breed_result = FAILURE, return null
+	# Failure chance formula: base 5% + gen_gap * 5% + instability penalty
+	# gen_gap = abs(parent_a.generation - parent_b.generation)
+	# instability_penalty = (1.0 - avg_stability) * 0.10
+	# Cap at 30% maximum (so breeding never feels hopeless)
+	var gen_gap: int = abs(parent_a.generation - parent_b.generation)
+	var avg_stability: float = (parent_a.stability + parent_b.stability) / 2.0
+	var instability_penalty: float = (1.0 - avg_stability) * 0.10
+	var failure_chance: float = 0.05 + (gen_gap * 0.05) + instability_penalty
+	failure_chance = min(failure_chance, 0.30)  # Cap at 30%
+
+	if randf() < failure_chance:
+		last_breed_result = BreedResult.FAILURE
+		return null
+
+	# Step 3: Create child, inherit traits, roll mutations, inherit personality, set metadata, clamp traits
 	var child = Strain.new()
 
 	# --- TRAIT INHERITANCE ---
@@ -161,6 +217,62 @@ static func breed(parent_a: Strain, parent_b: Strain) -> Strain:
 	child.resilience = clampf(child.resilience, 0.0, 1.0)
 	child.stability = clampf(child.stability, 0.0, 1.0)
 
+	# Step 4: Check degraded offspring -> if triggered, reduce all traits, set mutation_event
+	# Chance: 12% base, modified by stability: + (1.0 - avg_stability) * 0.08
+	# Example: 50% stability = 12% + 4% = 16% chance
+	# When triggered: all 5 child traits multiplied by randf_range(0.80, 0.90) (10-20% reduction)
+	# This check happens AFTER trait inheritance and mutation rolls, so mutations
+	# can still occur on degraded offspring (rare but possible)
+	var degraded_chance: float = 0.12 + (1.0 - avg_stability) * 0.08
+	if randf() < degraded_chance:
+		var reduction_factor: float = randf_range(0.80, 0.90)
+		var details: Dictionary = {}
+		var affected: Array[String] = []
+
+		# Apply degradation to all 5 traits
+		var all_traits: Array[String] = ["stealth", "speed", "payload", "resilience", "stability"]
+		for trait_name in all_traits:
+			var old_val: float = child.get(trait_name)
+			var new_val: float = old_val * reduction_factor
+			child.set(trait_name, new_val)
+			details[trait_name] = {"old": old_val, "new": new_val}
+			affected.append(trait_name)
+
+		# Set mutation_event for the degraded offspring
+		child.mutation_event = {
+			"event_name": "DEGRADED OFFSPRING",
+			"event_desc": "The offspring is runty -- all traits reduced.",
+			"event_color": Color(0.5, 0.45, 0.4),  # Muddy brown
+			"affected_traits": affected,
+			"details": details,
+		}
+
+	# Step 5: Check genetic damage
+	# Chance: 15% base
+	# When triggered: pick one parent randomly (50/50), reduce their stability
+	# by randf_range(0.05, 0.10) (5-10%)
+	# This modifies the parent IN PLACE (the actual Strain object in player_strains)
+	# Do NOT save this in mutation_event (that's for the child's event).
+	# Instead, return info via last_genetic_damage Dictionary
+	if randf() < 0.15:
+		var damaged_parent: Strain
+		if randf() < 0.5:
+			damaged_parent = parent_a
+		else:
+			damaged_parent = parent_b
+
+		var stability_lost: float = randf_range(0.05, 0.10)
+		var old_stability: float = damaged_parent.stability
+		damaged_parent.stability = max(0.0, damaged_parent.stability - stability_lost)
+
+		last_genetic_damage = {
+			"parent_name": damaged_parent.strain_name,
+			"stability_lost": stability_lost,
+			"new_stability": damaged_parent.stability,
+		}
+
+	# Step 6: Set last_breed_result = SUCCESS, return child
+	last_breed_result = BreedResult.SUCCESS
 	return child
 
 

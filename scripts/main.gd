@@ -633,8 +633,34 @@ func _on_breed_button_pressed() -> void:
 		breed_result_label.text = "Not enough data! Need %d." % cost
 		return
 
+	# Deduct cost upfront -- if breeding fails, the data is LOST (not refunded)
 	player_data -= cost
 	var child: Strain = Breeding.breed(parent_a, parent_b)
+
+	# Check the breeding result to distinguish failure types
+	var result: int = Breeding.last_breed_result
+
+	# SELF_BREEDING: UI prevents this, but handle it just in case
+	if result == Breeding.BreedResult.SELF_BREEDING:
+		breed_result_label.text = "Cannot breed a bug with itself!"
+		player_data += cost  # Refund since this is a UI error, not a risk mechanic
+		return
+
+	# FAILURE: Breeding attempt failed entirely -- data lost, no child
+	if result == Breeding.BreedResult.FAILURE:
+		breed_result_label.text = "Breeding failed! Data lost."
+		# Do NOT refund cost -- breeding failure consumes the data
+		# Do NOT show discovery overlay
+		# Still set cooldown (the lab needs to cool down after a failed attempt)
+		breed_cooldown = BREED_COOLDOWN_TIME
+		breed_button.disabled = true
+		breed_button.text = "Cooling (%.0fs)" % breed_cooldown
+		update_breed_cost_display()
+		print("Breeding FAILED: %s + %s (cost %d lost)" % [parent_a.strain_name, parent_b.strain_name, cost])
+		return
+
+	# SUCCESS: Child produced (may be degraded, parent may have genetic damage)
+	# child should not be null here, but safety check
 	if child == null:
 		breed_result_label.text = "Breeding failed (error)!"
 		player_data += cost
@@ -655,6 +681,14 @@ func _on_breed_button_pressed() -> void:
 	if not child.mutation_event.is_empty():
 		var event_name: String = child.mutation_event.get("event_name", "MUTATION")
 		result_text += " -- %s!" % event_name
+
+	# Check for genetic damage to parent -- append warning to result label
+	if not Breeding.last_genetic_damage.is_empty():
+		var dmg: Dictionary = Breeding.last_genetic_damage
+		var parent_name: String = dmg.get("parent_name", "Unknown")
+		var stability_lost: float = dmg.get("stability_lost", 0.0)
+		result_text += " Warning: %s took genetic damage (-%.0f%% stability)!" % [parent_name, stability_lost * 100]
+
 	breed_result_label.text = result_text
 
 	# --- SHOW THE DISCOVERY MOMENT ---
@@ -681,6 +715,9 @@ func _on_breed_button_pressed() -> void:
 	])
 	if not child.mutation_event.is_empty():
 		print("  Mutation event: %s" % child.mutation_event.get("event_name", "?"))
+	if not Breeding.last_genetic_damage.is_empty():
+		var dmg = Breeding.last_genetic_damage
+		print("  Genetic damage: %s lost %.2f stability (now %.2f)" % [dmg.get("parent_name", "?"), dmg.get("stability_lost", 0.0), dmg.get("new_stability", 0.0)])
 
 
 # ---------------------------------------------------------------------------
