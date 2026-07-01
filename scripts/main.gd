@@ -1067,14 +1067,16 @@ func update_home_base_display() -> void:
 		home_base_action_label.text = "Ready to assign %s" % selected.strain_name
 
 
-## Populates the defender dropdown with available bugs (not deployed, not already defending).
 func update_defender_dropdown() -> void:
 	defender_dropdown.clear()
+	# Show all bugs that are not deployed to a zone.
+	# This includes bugs that are currently defending, so the player can select them to recall.
 	for i in range(player_strains.size()):
 		var strain: Strain = player_strains[i]
-		# Only show bugs that are at home base and not already defending
-		if not _is_strain_deployed(strain) and not home_base.is_defender(strain):
+		if not _is_strain_deployed(strain):
 			var label: String = "%s (Gen %d)" % [strain.strain_name, strain.generation]
+			if home_base.is_defender(strain):
+				label += " [DEFENDING]"
 			defender_dropdown.add_item(label, i)
 
 
@@ -1103,18 +1105,19 @@ func _on_assign_defender_pressed() -> void:
 		home_base_action_label.text = "Failed to assign (base full?)"
 
 
-## Recalls all defenders from home base defense duty.
 func _on_recall_defender_pressed() -> void:
-	if home_base.defenders.is_empty():
-		home_base_action_label.text = "No defenders to recall"
+	var selected: Strain = _get_selected_defender_strain()
+	if selected == null:
 		return
-	var count: int = home_base.defenders.size()
-	home_base.defenders.clear()
-	home_base_action_label.text = "Recalled %d defender(s)" % count
-	update_strain_display()
-	update_strain_list()
-	update_defender_dropdown()
-	update_home_base_display()
+	
+	if home_base.recall_defender(selected):
+		home_base_action_label.text = "Recalled %s from defense" % selected.strain_name
+		update_strain_display()
+		update_strain_list()
+		update_defender_dropdown()
+		update_home_base_display()
+	else:
+		home_base_action_label.text = "Bug is not assigned as defender"
 
 
 ## Resolves a home base attack: defenders roll resilience vs attack strength.
