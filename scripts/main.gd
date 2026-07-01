@@ -325,7 +325,7 @@ func _apply_label_colors() -> void:
 
 	# Section header = bruised purple
 	var breed_title: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/BreedPanel/BreedTitle
-	breed_title.add_theme_color_override("font_color", LabTheme.HEADER_BREED)
+	breed_title.add_theme_color_override("font_color", LabTheme.ACCENT_BREED)
 
 	# Cost = bile yellow
 	var breed_cost: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/BreedPanel/BreedCostLabel
@@ -341,21 +341,21 @@ func _apply_label_colors() -> void:
 
 	# Entry display = muted green (codex entries have a clinical green tint)
 	var codex_entry: Label = $ScrollContainer/MarginContainer/VBox/CodexView/CodexEntryLabel
-	codex_entry.add_theme_color_override("font_color", LabTheme.HEADER_CODEX)
+	codex_entry.add_theme_color_override("font_color", LabTheme.ACCENT_CODEX)
 
 	# --- ZONES VIEW ---
 
 	# Zone info = muted green
 	var zone_info: Label = $ScrollContainer/MarginContainer/VBox/ZonesView/ZoneInfoLabel
-	zone_info.add_theme_color_override("font_color", LabTheme.HEADER_CODEX)
+	zone_info.add_theme_color_override("font_color", LabTheme.ACCENT_CODEX)
 
 	# Section header = cold blue-purple
 	var deploy_title: Label = $ScrollContainer/MarginContainer/VBox/ZonesView/ZoneDeployPanel/DeployTitle
-	deploy_title.add_theme_color_override("font_color", LabTheme.HEADER_DEPLOY)
+	deploy_title.add_theme_color_override("font_color", LabTheme.ACCENT_DEPLOY)
 
 	# Home base section header = bruised purple (same as breed lab)
 	var home_base_title: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel/HomeBaseTitle
-	home_base_title.add_theme_color_override("font_color", LabTheme.HEADER_BREED)
+	home_base_title.add_theme_color_override("font_color", LabTheme.ACCENT_HOME)
 
 	# Action label = warm yellow (action feedback, same as breed result)
 	var zone_action: Label = $ScrollContainer/MarginContainer/VBox/ZonesView/ZoneDeployPanel/ZoneActionLabel
