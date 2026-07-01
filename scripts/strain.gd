@@ -99,6 +99,29 @@ enum Personality {
 ## Stored as a string like "2026-06-28" for simple display.
 
 # ---------------------------------------------------------------------------
+# MUTATION EVENT RECORD - What happened during breeding
+# ---------------------------------------------------------------------------
+# This is a TRANSIENT field -- it's not exported and not saved. It only exists
+# right after breeding to pass information about the mutation event from
+# breeding.gd to the UI (main.gd's discovery moment overlay).
+#
+# When breeding produces a mutation, breeding.gd fills this Dictionary with:
+#   "event_name": String  -- e.g. "TRAIT SURGE", "HYPERGENESIS"
+#   "event_desc": String  -- human-readable description for the UI
+#   "event_color": Color   -- color for the UI display (biological palette)
+#   "affected_traits": Array[String] -- which traits were mutated
+#   "details": Dictionary  -- per-trait before/after values
+#
+# If no mutation occurred, this is empty {}. The UI checks .is_empty().
+#
+# We DON'T @export this because it shouldn't be editable in the inspector
+# (it's set by code during breeding, not by a designer).
+# We DON'T serialize it in the save system because it's a one-time notification
+# -- if you load a save, the mutation already happened, you don't need to see
+# the popup again.
+var mutation_event: Dictionary = {}
+
+# ---------------------------------------------------------------------------
 # CALCULATED PROPERTIES - Not stored, computed on demand
 # ---------------------------------------------------------------------------
 # These are "getters" - functions that calculate a value when called.

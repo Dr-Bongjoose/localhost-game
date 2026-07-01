@@ -652,8 +652,9 @@ func _on_breed_button_pressed() -> void:
 
 	# Keep a short summary in the breed result label too (for when the overlay closes)
 	var result_text: String = "Bred: %s (Gen %d) [%s]" % [child.strain_name, child.generation, rarity_name]
-	if not mutations.is_empty():
-		result_text += " -- %d mutation(s)!" % mutations.size()
+	if not child.mutation_event.is_empty():
+		var event_name: String = child.mutation_event.get("event_name", "MUTATION")
+		result_text += " -- %s!" % event_name
 	breed_result_label.text = result_text
 
 	# --- SHOW THE DISCOVERY MOMENT ---
@@ -678,6 +679,8 @@ func _on_breed_button_pressed() -> void:
 		parent_a.strain_name, parent_b.strain_name, child.strain_name,
 		rarity_name, cost, mutations.size()
 	])
+	if not child.mutation_event.is_empty():
+		print("  Mutation event: %s" % child.mutation_event.get("event_name", "?"))
 
 
 # ---------------------------------------------------------------------------
@@ -1142,19 +1145,45 @@ func _show_discovery_moment(child: Strain, rarity: Codex.Rarity, mutations: Dict
 	traits_text += "Personality: %s" % child.get_personality_label()
 	discovery_traits.text = traits_text
 
-	# Mutations (if any)
-	if mutations.is_empty():
-		discovery_mutations.text = "No mutations detected."
+	# Mutations (if any) -- now using NAMED MUTATION EVENTS
+	# The child's mutation_event Dictionary is set by breeding.gd when a
+	# mutation occurs. It contains the event name, description, color,
+	# affected traits, and before/after values.
+	#
+	# If mutation_event is empty, no mutation happened (stable breeding).
+	# If it has content, we show the event name in big colored text and
+	# the description below it -- much more dramatic than the old
+	# "expected 40%, got 55%" format.
+	if child.mutation_event.is_empty():
+		discovery_mutations.text = "No mutations detected. Stable breeding."
 	else:
-		var mut_text: String = "MUTATIONS DETECTED:\n"
-		for trait_name in mutations:
-			var data: Dictionary = mutations[trait_name]
-			mut_text += "  %s: expected %.0f%%, got %.0f%%\n" % [
-				trait_name.capitalize(),
-				data["expected"] * 100,
-				data["actual"] * 100
-			]
+		var event: Dictionary = child.mutation_event
+		var event_name: String = event.get("event_name", "UNKNOWN")
+		var event_desc: String = event.get("event_desc", "")
+		var event_color: Color = event.get("event_color", Color(0.5, 0.5, 0.5))
+		var details: Dictionary = event.get("details", {})
+
+		# Build the mutation display text:
+		# Line 1: Event name in its color (set via theme override)
+		# Line 2: Description (flavor text)
+		# Line 3+: Per-trait before/after breakdown
+		var mut_text: String = event_name + "\n"
+		mut_text += event_desc + "\n"
+		if not details.is_empty():
+			mut_text += "\n"
+			for trait_name in details:
+				var data: Dictionary = details[trait_name]
+				mut_text += "  %s: %.0f%% -> %.0f%%\n" % [
+					trait_name.capitalize(),
+					data["old"] * 100,
+					data["new"] * 100
+				]
 		discovery_mutations.text = mut_text
+
+		# Color the mutation text with the event's biological color
+		# This makes a TRAIT SURGE look green (beneficial), DEGRADATION
+		# look red (harmful), HYPERGENESIS look gold (mythic), etc.
+		discovery_mutations.add_theme_color_override("font_color", event_color)
 
 	# --- RESET ALL ELEMENTS TO INVISIBLE ---
 	# modulate.a = 0 means fully transparent. We fade them in with tweens.

@@ -194,6 +194,123 @@ func _init() -> void:
 		print("  FAIL: breeds should produce variety (unique names: %d, payloads same: %s)" % [unique_names, all_same])
 		all_passed = false
 
+	# ====================================================================
+	# NAMED MUTATION EVENT TESTS (Phase 2)
+	# ====================================================================
+
+	# Test 10: mutation_event is populated when a mutation occurs
+	print("\n[10] Testing mutation_event is set on mutated children...")
+	# Use very unstable parents to guarantee mutations
+	var unstable_parent_a = Strain.create_seed()
+	unstable_parent_a.stability = 0.01
+	unstable_parent_a.strain_name = "UnstableA"
+	var unstable_parent_b = Strain.create_seed()
+	unstable_parent_b.stability = 0.01
+	unstable_parent_b.strain_name = "UnstableB"
+
+	var mutation_found: bool = false
+	var attempts: int = 0
+	for i in range(100):
+		var c = Breeding.breed(unstable_parent_a, unstable_parent_b)
+		if not c.mutation_event.is_empty():
+			mutation_found = true
+			# Verify the event Dictionary has the expected keys
+			var event: Dictionary = c.mutation_event
+			var has_name: bool = event.has("event_name")
+			var has_desc: bool = event.has("event_desc")
+			var has_color: bool = event.has("event_color")
+			var has_traits: bool = event.has("affected_traits")
+			var has_details: bool = event.has("details")
+			if has_name and has_desc and has_color and has_traits and has_details:
+				print("  PASS: mutation_event populated with all keys -- event: %s" % event["event_name"])
+			else:
+				print("  FAIL: mutation_event missing keys (name=%s desc=%s color=%s traits=%s details=%s)" % [
+					has_name, has_desc, has_color, has_traits, has_details])
+				all_passed = false
+			break
+	if not mutation_found:
+		print("  FAIL: no mutations triggered in 100 breeds with unstable parents")
+		all_passed = false
+
+	# Test 11: mutation_event is empty when no mutation occurs (stable parents)
+	print("\n[11] Testing mutation_event is empty for stable parents...")
+	var stable_parent_a = Strain.create_seed()
+	stable_parent_a.stability = 1.0
+	stable_parent_a.strain_name = "StableA"
+	var stable_parent_b = Strain.create_seed()
+	stable_parent_b.stability = 1.0
+	stable_parent_b.strain_name = "StableB"
+
+	var stable_no_mutations: bool = true
+	for i in range(20):
+		var c = Breeding.breed(stable_parent_a, stable_parent_b)
+		if not c.mutation_event.is_empty():
+			stable_no_mutations = false
+			break
+	if stable_no_mutations:
+		print("  PASS: stable parents produced no mutation events in 20 breeds")
+	else:
+		print("  FAIL: stable parents (stability=1.0) should rarely mutate")
+		all_passed = false
+
+	# Test 12: All mutation event types can be triggered
+	print("\n[12] Testing all mutation event types appear...")
+	# Breed many unstable children and collect all event names
+	var event_names_seen: Array = []
+	for i in range(500):
+		var c = Breeding.breed(unstable_parent_a, unstable_parent_b)
+		if not c.mutation_event.is_empty():
+			var name: String = c.mutation_event.get("event_name", "")
+			if not event_names_seen.has(name):
+				event_names_seen.append(name)
+	print("  Events seen: %s" % str(event_names_seen))
+	# We should at minimum see the two common events (SURGE, DEGRADE)
+	# and ideally at least one rare event in 500 breeds
+	if event_names_seen.has("TRAIT SURGE") and event_names_seen.has("DEGRADATION"):
+		print("  PASS: common events (SURGE, DEGRADE) both appeared")
+		if event_names_seen.size() >= 3:
+			print("  BONUS: %d distinct event types appeared (good variety)" % event_names_seen.size())
+	else:
+		print("  FAIL: expected at least TRAIT SURGE and DEGRADATION in 500 breeds")
+		all_passed = false
+
+	# Test 13: HYPERGENESIS boosts all traits
+	print("\n[13] Testing HYPERGENESIS affects all 5 traits...")
+	# We can't force a specific mutation, but we can breed many unstable
+	# children and check if any had a HYPERGENESIS event with 5 affected traits
+	var hypergenesis_found: bool = false
+	for i in range(500):
+		var c = Breeding.breed(unstable_parent_a, unstable_parent_b)
+		if not c.mutation_event.is_empty():
+			var name: String = c.mutation_event.get("event_name", "")
+			if name == "HYPERGENESIS":
+				var affected: Array = c.mutation_event.get("affected_traits", [])
+				if affected.size() == 5:
+					hypergenesis_found = true
+					print("  PASS: HYPERGENESIS affected all 5 traits")
+					break
+	if not hypergenesis_found:
+		# HYPERGENESIS is 5% of mutations -- in 500 breeds with ~45% mutation
+		# chance that's ~11 HYPERGENESIS events expected. Very unlikely to miss.
+		print("  FAIL: no HYPERGENESIS with 5 affected traits in 500 breeds")
+		all_passed = false
+
+	# Test 14: STABILITY COLLAPSE drops stability to near 0
+	print("\n[14] Testing STABILITY COLLAPSE crashes stability...")
+	var collapse_found: bool = false
+	for i in range(500):
+		var c = Breeding.breed(unstable_parent_a, unstable_parent_b)
+		if not c.mutation_event.is_empty():
+			var name: String = c.mutation_event.get("event_name", "")
+			if name == "STABILITY COLLAPSE":
+				if c.stability <= 0.15:
+					collapse_found = true
+					print("  PASS: STABILITY COLLAPSE dropped stability to %.0f%%" % (c.stability * 100))
+					break
+	if not collapse_found:
+		print("  FAIL: no STABILITY COLLAPSE with stability <= 15%% in 500 breeds")
+		all_passed = false
+
 	# Results
 	print("\n=== RESULTS ===")
 	if all_passed:

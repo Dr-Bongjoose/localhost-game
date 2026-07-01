@@ -6,7 +6,7 @@
 # functions you call. Think of it as a laboratory procedure: you give it
 # two parent strains, it gives you back a child strain.
 #
-# BREEDING RULES (Phase 1 -- always succeeds, no failure yet):
+# BREEDING RULES (Phase 2 -- now with NAMED MUTATION EVENTS):
 # 1. Each trait of the child is a weighted average of the parents' traits,
 #    biased toward the stronger parent (60% stronger, 40% weaker).
 # 2. Every trait has a small random jitter (+/- 0.05) to make even identical
@@ -14,19 +14,69 @@
 # 3. Mutation chance is based on BOTH parents' stability:
 #    Low stability (both parents) = high mutation chance
 #    High stability (both parents) = low mutation chance
-#    A mutation randomly shifts a trait by a larger amount (up or down).
+#    When a mutation triggers, it's not just a random trait shift -- it's
+#    a NAMED EVENT (Trait Surge, Degradation, Inversion, Cascade, etc.)
+#    with its own mechanical effects and flavor text.
 # 4. The child's generation is max(parent_a.generation, parent_b.generation) + 1.
 # 5. The child inherits a personality from one of the parents (random pick),
 #    or if both parents have NONE, there's a small chance of a spontaneous
 #    personality emerging.
 # 6. Breeding costs data (currency). The cost goes up with generation.
 #
-# We save the risk mechanics (breeding failure, degraded offspring) for
-# Phase 2. Phase 1 breeding always produces a valid child.
+# The mutation event info is stored on the child strain in `mutation_event`
+# (a Dictionary) so the UI can display it in the discovery moment overlay.
 # ============================================================================
 
 class_name Breeding
 extends RefCounted
+
+# ---------------------------------------------------------------------------
+# MUTATION EVENT TYPES
+# ---------------------------------------------------------------------------
+# Each mutation is a NAMED EVENT, not just an anonymous trait shift.
+# This makes every breed a roll of the dice with dramatic outcomes.
+# Events are weighted -- common ones happen often, rare ones are exciting.
+#
+# The weight determines how likely each event is relative to others.
+# Higher weight = more common. We pick using weighted random selection:
+#   1. Sum all weights
+#   2. Pick a random number 0 to total_weight
+#   3. Walk through the events, subtracting each weight until we hit 0
+# This is the standard "roulette wheel" algorithm used in games everywhere.
+#
+# The event Dictionary stored on the child strain has:
+#   "event_name": String  -- uppercase display name ("TRAIT SURGE")
+#   "event_desc": String  -- flavor text for the UI
+#   "event_color": Color  -- biological palette color for UI emphasis
+#   "affected_traits": Array[String] -- which traits changed
+#   "details": Dictionary  -- { trait_name: {"old": float, "new": float} }
+
+enum MutationType {
+	SURGE,            ## One trait jumps UP significantly (good)
+	DEGRADE,          ## One trait drops significantly (bad)
+	INVERSION,        ## A high trait goes low, or low goes high (dramatic)
+	CASCADE,          ## 2-3 traits all shift in the same direction
+	PERSONALITY_EMERGENCE, ## Strain gains a new personality neither parent had
+	STABILITY_COLLAPSE,    ## Stability crashes -- future breeding goes wild
+	HYPERGENESIS,     ## ALL traits shift up slightly (the jackpot)
+}
+
+# Weight table -- how likely each event is when a mutation triggers.
+# Total weight = 100, so weights are effectively percentages.
+# SURGE and DEGRADATION are common (30 each = 60% of all mutations)
+# INVERSION and CASCADE are uncommon (15 each = 30%)
+# PERSONALITY_EMERGENCE and STABILITY_COLLAPSE are rare (5 each = 10%)
+# HYPERGENESIS is very rare (5 = 5%) -- but it's 5 out of 100, not 5%
+# because the total is 100, each point of weight = 1% chance.
+const MUTATION_WEIGHTS: Dictionary = {
+	MutationType.SURGE: 30,
+	MutationType.DEGRADE: 30,
+	MutationType.INVERSION: 15,
+	MutationType.CASCADE: 15,
+	MutationType.PERSONALITY_EMERGENCE: 5,
+	MutationType.STABILITY_COLLAPSE: 5,
+	MutationType.HYPERGENESIS: 5,
+}
 
 # ---------------------------------------------------------------------------
 # BREEDING COST
@@ -81,8 +131,10 @@ static func breed(parent_a: Strain, parent_b: Strain) -> Strain:
 
 	# Roll for mutation -- randf() returns a random float 0.0 to 1.0
 	# If the roll is below the mutation chance, a mutation occurs
+	# We pass the child AND both parents so the mutation function can
+	# make informed choices (e.g. Inversion flips the strongest trait).
 	if randf() < mutation_chance:
-		_apply_mutation(child)
+		_apply_mutation(child, parent_a, parent_b)
 
 	# --- PERSONALITY INHERITANCE ---
 	child.personality = _inherit_personality(parent_a, parent_b)
@@ -151,39 +203,260 @@ static func _calculate_mutation_chance(parent_a: Strain, parent_b: Strain) -> fl
 	return chance
 
 
-## Applies a mutation to the child strain.
-## A mutation randomly shifts 1-3 traits by a larger amount than normal jitter.
-## The shift can be positive (beneficial mutation) or negative (harmful mutation).
-## This is what makes breeding exciting -- you might get something amazing
-## or something terrible. The discovery moment.
-static func _apply_mutation(child: Strain) -> void:
-	# Pick how many traits mutate (1 to 3)
-	var num_mutations: int = randi_range(1, 3)
+## Applies a mutation to the child strain using the NAMED EVENT system.
+## This is what makes breeding exciting -- you might get a Trait Surge
+## (payload jumps up!), a Degradation (resilience tanks), or if you're
+## incredibly lucky, a Hypergenesis (everything goes up).
+##
+## The function:
+## 1. Picks a mutation type using weighted random selection
+## 2. Applies the mechanical effects (trait shifts) for that event type
+## 3. Builds a mutation_event Dictionary on the child with name, description,
+##    color, affected traits, and before/after values for the UI to display
+##
+## Parameters:
+##   child: the strain being mutated (modified in place)
+##   parent_a, parent_b: the parent strains (used for context, e.g. which
+##     trait is strongest, what personalities the parents have)
+static func _apply_mutation(child: Strain, parent_a: Strain, parent_b: Strain) -> void:
+	# Pick which mutation event happens using weighted random selection
+	var event_type: MutationType = _pick_mutation_type()
 
-	# Put all trait names in an array so we can pick randomly
-	# We store them as strings and use set() to modify the property by name
-	var trait_names: Array[String] = ["stealth", "speed", "payload", "resilience", "stability"]
+	# All trait names in an array for easy random selection
+	var all_traits: Array[String] = ["stealth", "speed", "payload", "resilience", "stability"]
 
-	# Shuffle the array so we pick random traits to mutate
-	trait_names.shuffle()
+	# This will hold the before/after values for each affected trait
+	var details: Dictionary = {}
+	var affected: Array[String] = []
 
-	# Mutate the first N traits
-	for i in range(num_mutations):
-		var trait_name: String = trait_names[i]
+	# Each mutation type has its own mechanical effect.
+	# We use match (Godot's switch statement) to handle each one.
+	match event_type:
+		MutationType.SURGE:
+			# TRAIT SURGE: One random trait jumps UP by +0.15 to +0.25
+			# This is a beneficial mutation -- you got lucky!
+			var trait_name: String = all_traits[randi_range(0, all_traits.size() - 1)]
+			var old_val: float = child.get(trait_name)
+			var boost: float = randf_range(0.15, 0.25)
+			child.set(trait_name, old_val + boost)
+			details[trait_name] = {"old": old_val, "new": child.get(trait_name)}
+			affected.append(trait_name)
+			child.mutation_event = {
+				"event_name": "TRAIT SURGE",
+				"event_desc": "%s surged! The strain's %s jumped from %.0f%% to %.0f%%." % [
+					trait_name.capitalize(), trait_name.capitalize(), old_val * 100, child.get(trait_name) * 100
+				],
+				"event_color": Color(0.5, 0.8, 0.4),  # Sickly green (beneficial)
+				"affected_traits": affected,
+				"details": details,
+			}
 
-		# Mutation magnitude: shift the trait by -0.15 to +0.15
-		# This is 3x the normal jitter, enough to create meaningful change
-		var mutation_amount: float = randf_range(-0.15, 0.15)
+		MutationType.DEGRADE:
+			# DEGRADATION: One random trait drops by -0.15 to -0.25
+			# This is a harmful mutation -- ouch. But it creates strategic
+			# decisions: do you keep this degraded strain or breed it away?
+			var trait_name: String = all_traits[randi_range(0, all_traits.size() - 1)]
+			var old_val: float = child.get(trait_name)
+			var drop: float = randf_range(0.15, 0.25)
+			child.set(trait_name, old_val - drop)
+			details[trait_name] = {"old": old_val, "new": child.get(trait_name)}
+			affected.append(trait_name)
+			child.mutation_event = {
+				"event_name": "DEGRADATION",
+				"event_desc": "%s degraded. The strain's %s fell from %.0f%% to %.0f%%." % [
+					trait_name.capitalize(), trait_name.capitalize(), old_val * 100, child.get(trait_name) * 100
+				],
+				"event_color": Color(0.7, 0.3, 0.3),  # Deep crimson (harmful)
+				"affected_traits": affected,
+				"details": details,
+			}
 
-		# Get the current value, apply the mutation, and set it back
-		# We use get() and set() to access properties by string name
-		var current_value: float = child.get(trait_name)
-		var new_value: float = current_value + mutation_amount
-		child.set(trait_name, new_value)
+		MutationType.INVERSION:
+			# TRAIT INVERSION: The child's strongest trait becomes its weakest,
+			# or its weakest becomes strongest. Dramatic but unpredictable.
+			# We find the trait with the highest value and slash it,
+			# OR find the lowest and boost it. 50/50 chance either way.
+			if randf() < 0.5:
+				# Find the child's highest trait and crash it
+				var highest_trait: String = all_traits[0]
+				var highest_val: float = child.get(highest_trait)
+				for t in all_traits:
+					if child.get(t) > highest_val:
+						highest_trait = t
+						highest_val = child.get(t)
+				var old_val: float = highest_val
+				# Invert: new value = 1.0 - old (high becomes low)
+				child.set(highest_trait, 1.0 - old_val)
+				details[highest_trait] = {"old": old_val, "new": child.get(highest_trait)}
+				affected.append(highest_trait)
+				child.mutation_event = {
+					"event_name": "INVERSION",
+					"event_desc": "%s inverted! Was %.0f%%, now %.0f%%. A dramatic shift." % [
+						highest_trait.capitalize(), old_val * 100, child.get(highest_trait) * 100
+					],
+					"event_color": Color(0.6, 0.5, 0.7),  # Bruised purple (unnatural)
+					"affected_traits": affected,
+					"details": details,
+				}
+			else:
+				# Find the child's lowest trait and boost it to near-max
+				var lowest_trait: String = all_traits[0]
+				var lowest_val: float = child.get(lowest_trait)
+				for t in all_traits:
+					if child.get(t) < lowest_val:
+						lowest_trait = t
+						lowest_val = child.get(t)
+				var old_val: float = lowest_val
+				# Invert: new value = 1.0 - old (low becomes high)
+				child.set(lowest_trait, 1.0 - old_val)
+				details[lowest_trait] = {"old": old_val, "new": child.get(lowest_trait)}
+				affected.append(lowest_trait)
+				child.mutation_event = {
+					"event_name": "INVERSION",
+					"event_desc": "%s inverted! Was %.0f%%, now %.0f%%. A dramatic shift." % [
+						lowest_trait.capitalize(), old_val * 100, child.get(lowest_trait) * 100
+					],
+					"event_color": Color(0.6, 0.5, 0.7),
+					"affected_traits": affected,
+					"details": details,
+				}
 
-	# Note: we don't print which traits mutated here -- the calling code
-	# can detect mutations by comparing parent and child traits.
-	# The discovery moment UI (Phase 2) will highlight mutations visually.
+		MutationType.CASCADE:
+			# CASCADE: 2-3 traits all shift in the SAME direction.
+			# Could be a cascade bloom (all up) or cascade failure (all down).
+			# 50/50 which direction. This is exciting because it affects
+			# multiple stats at once -- the strain is fundamentally different.
+			var num_traits: int = randi_range(2, 3)
+			var is_bloom: bool = randf() < 0.5  # 50% chance of positive cascade
+
+			# Pick random traits to cascade (shuffle and take first N)
+			var shuffled: Array[String] = all_traits.duplicate()
+			shuffled.shuffle()
+
+			var shift: float = randf_range(0.10, 0.20)  # Each trait shifts 10-20%
+			if not is_bloom:
+				shift = -shift  # Negative for cascade failure
+
+			for i in range(num_traits):
+				var trait_name: String = shuffled[i]
+				var old_val: float = child.get(trait_name)
+				child.set(trait_name, old_val + shift)
+				details[trait_name] = {"old": old_val, "new": child.get(trait_name)}
+				affected.append(trait_name)
+
+			var direction: String = "bloom" if is_bloom else "failure"
+			child.mutation_event = {
+				"event_name": "CASCADE %s" % direction.to_upper(),
+				"event_desc": "Cascade %s! %d traits shifted %s." % [
+					direction, num_traits, "upward" if is_bloom else "downward"
+				],
+				"event_color": Color(0.8, 0.6, 0.3) if is_bloom else Color(0.6, 0.3, 0.3),
+				"affected_traits": affected,
+				"details": details,
+			}
+
+		MutationType.PERSONALITY_EMERGENCE:
+			# PERSONALITY EMERGENCE: The child gains a random personality
+			# that NEITHER parent had. This is how new lineages are born.
+			# Even if both parents are "Basic" (NONE), the child can emerge
+			# with a personality. This is the only mutation that affects
+			# personality instead of traits (we still shift one trait for
+			# mechanical impact so it's not a "wasted" mutation).
+			var old_personality: int = child.personality  # Before emergence
+
+			# Pick a random personality (1-5, skipping NONE=0)
+			child.personality = randi_range(1, 5) as Strain.Personality
+
+			# Also shift one trait slightly so there's a mechanical effect
+			var trait_name: String = all_traits[randi_range(0, all_traits.size() - 1)]
+			var old_val: float = child.get(trait_name)
+			child.set(trait_name, old_val + randf_range(0.05, 0.10))
+			details[trait_name] = {"old": old_val, "new": child.get(trait_name)}
+			affected.append(trait_name)
+
+			child.mutation_event = {
+				"event_name": "PERSONALITY EMERGENCE",
+				"event_desc": "A new lineage emerges! This strain developed %s personality." % child.get_personality_label(),
+				"event_color": Color(0.9, 0.8, 0.3),  # Bile yellow (otherworldly)
+				"affected_traits": affected,
+				"details": details,
+			}
+
+		MutationType.STABILITY_COLLAPSE:
+			# STABILITY COLLAPSE: Stability crashes to near 0.
+			# This makes the strain a genetic wildcard -- future breeding
+			# with it will have very high mutation chance (low stability =
+			# high mutation chance). It's a trade: this strain's offspring
+			# will be unpredictable, which could be good OR bad.
+			var old_val: float = child.stability
+			child.stability = randf_range(0.05, 0.15)  # Crash to 5-15%
+			details["stability"] = {"old": old_val, "new": child.stability}
+			affected.append("stability")
+			child.mutation_event = {
+				"event_name": "STABILITY COLLAPSE",
+				"event_desc": "Genetic instability! Stability crashed from %.0f%% to %.0f%%. Future breeding will be volatile." % [
+					old_val * 100, child.stability * 100
+				],
+				"event_color": Color(0.7, 0.4, 0.5),  # Bruised mauve (unstable)
+				"affected_traits": affected,
+				"details": details,
+			}
+
+		MutationType.HYPERGENESIS:
+			# HYPERGENESIS: ALL traits shift up by +0.05 to +0.08.
+			# This is the jackpot. Every single trait gets a small boost.
+			# It's rare (5% of mutations) but when it happens, it's amazing.
+			# The child becomes strictly better than its parents expected.
+			for trait_name in all_traits:
+				var old_val: float = child.get(trait_name)
+				child.set(trait_name, old_val + randf_range(0.05, 0.08))
+				details[trait_name] = {"old": old_val, "new": child.get(trait_name)}
+				affected.append(trait_name)
+
+			child.mutation_event = {
+				"event_name": "HYPERGENESIS",
+				"event_desc": "HYPERGENESIS! All traits surged simultaneously. An exceptional specimen.",
+				"event_color": Color(0.9, 0.85, 0.4),  # Bright bile gold (mythic)
+				"affected_traits": affected,
+				"details": details,
+			}
+
+	# Note: traits are clamped to 0.0-1.0 after mutations in breed()
+	# (the calling function handles clamping). We don't clamp here so
+	# the "new" values in details show the raw mutation result -- the
+	# clamp only affects the final stored value, not the reported change.
+
+
+## Picks a mutation type using weighted random selection (roulette wheel).
+## Each mutation type has a weight in MUTATION_WEIGHTS. We sum all weights,
+## pick a random number in that range, and walk through the types until we
+## find the one we landed on.
+##
+## This is the standard algorithm used in games for weighted random selection.
+## It's like a roulette wheel where each type is a slice proportional to its
+## weight. Bigger slices (SURGE, DEGRADE) are hit more often.
+##
+## Returns: a MutationType enum value
+static func _pick_mutation_type() -> MutationType:
+	# Step 1: Sum all the weights
+	var total_weight: float = 0.0
+	for type in MUTATION_WEIGHTS:
+		total_weight += MUTATION_WEIGHTS[type]
+
+	# Step 2: Pick a random number in the range [0, total_weight)
+	var roll: float = randf() * total_weight
+
+	# Step 3: Walk through each type, subtracting its weight from the roll.
+	# When the roll goes below 0, we've found our type.
+	for type in MUTATION_WEIGHTS:
+		roll -= MUTATION_WEIGHTS[type]
+		if roll <= 0.0:
+			return type as MutationType
+
+	# Fallback (should never reach here if weights are set up correctly)
+	# This is a safety net -- if the loop somehow doesn't return, we
+	# default to SURGE as the most common type.
+	return MutationType.SURGE
 
 
 # ---------------------------------------------------------------------------
