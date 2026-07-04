@@ -1,39 +1,30 @@
 # ============================================================================
-# home_base.gd - The Home Base Defense System
+# home_base.gd - The Home Base Defense System (Passive + Active Boost)
 # ============================================================================
 # Your containment facility is your home base. Specimens assigned as defenders
-# protect it from incoming attacks. Successful defenses earn data -- this is
-# the "safe income" that replaces the old idle income mechanic.
+# protect it and earn passive income. You can also trigger an active defense
+# boost when you choose to engage.
 #
-# WHY THIS EXISTS:
-# Previously, idle specimens earned passive income for no reason. The player
-# said that felt meaningless. Now, contained specimens earn ZERO by default.
-# But if you ASSIGN them as defenders, they actively protect your base and
-# earn data from successful defenses. This gives the player a real decision:
-# "Do I keep this specimen as a defender (safe income) or deploy it as an
-# attacker to a zone (high income, high risk)?"
+# PASSIVE INCOME (always on when defenders assigned):
+# - Each defender earns data/sec = resilience * 0.5 * zone_data_value_base
+# - No risk, no heat generation, no attention required
+# - Replaces the old "idle income = 0" design — defenders give you a reason
+#   to keep some strains home instead of deploying everything
 #
-# HOW IT WORKS:
-# 1. The player assigns specimens as defenders (up to HOME_BASE_CAPACITY)
-# 2. An attack timer counts down. When it fires, the base gets attacked.
-# 3. Attack strength is random, scaled by global heat (more heat = stronger)
-# 4. Each defender rolls resilience + luck vs attack strength
-# 5. Surviving defenders earn data = attack_strength * resilience * reward_multiplier
-# 6. If ALL defenders fail (or no defenders), it's a breach -- you lose data
-# 7. Attack frequency scales with heat: quiet = 60s, aggressive = 15s
+# ACTIVE BOOST: "Activate Perimeter" (player-triggered, on cooldown)
+# - Click when YOU want to engage
+# - Cooldown scales with global heat (more heat = longer cooldown)
+# - Big one-time data payout based on defender strength + heat level
+# - Heat also increases chance of a "breach event" during the boost
+#   (defenders take stability damage, but you still get the payout)
+# - If no defenders assigned: button is disabled (no free boost)
 #
-# THE MATH:
-# - attack_strength: random 0.1 to 0.5, + heat * 0.01 (clamped to 0.9 max)
-#   At 0 heat: attacks are 0.1-0.5 strength (easy)
-#   At 50 heat: attacks are 0.1-1.0 strength (dangerous)
-#   At 100 heat: attacks are 0.1-1.5 strength (clamped to 0.9, brutal)
-# - defender_roll: resilience + randf(0, 0.3) (same luck factor as zone raids)
-# - survived: defender_roll >= attack_strength
-# - data_reward per surviving defender: attack_strength * resilience * 50
-#   Weak attack (0.2), weak defender (0.3): 0.2 * 0.3 * 50 = 3 data
-#   Medium attack (0.5), tough defender (0.7): 0.5 * 0.7 * 50 = 17.5 data
-#   Strong attack (0.8), tough defender (0.8): 0.8 * 0.8 * 50 = 32 data
-# - breach penalty (all defenders fail or no defenders): lose 10% of current data
+# WHY THIS RESPECTS PLAYER TIME:
+# - Passive income ticks away whether you're watching or not
+# - Active boost is OPTIONAL — you click it when you're playing actively
+# - No timer forcing you to check the game
+# - Heat makes the boost stronger (risk/reward) but also longer cooldown
+#   (natural pacing — you can't spam it when things are hot)
 # ============================================================================
 
 class_name HomeBase
@@ -46,54 +37,78 @@ extends RefCounted
 ## How many specimens can be assigned as defenders at once.
 const HOME_BASE_CAPACITY: int = 3
 
-## Multiplier for data reward calculation.
-## Was 50 -- too low (defense earned 20-50x less than zone income).
-## At 500: a resilience 0.5 bug surviving a 0.3 attack earns 75 data.
-## That's comparable to a weak zone deployment, making defense viable.
-const REWARD_MULTIPLIER: float = 500.0
+## Base passive income per defender per second per resilience point.
+## At resilience 0.5: 0.5 * 0.5 = 0.25 data/sec per defender.
+## 3 defenders at 0.5 resilience = 0.75 data/sec passive.
+## Compare to zone deployment: weak strain in Consumer zone = ~2 data/sec.
+## So passive is meaningful but zones are still better for active play.
+const PASSIVE_INCOME_PER_RESILIENCE: float = 0.5
 
-## Base attack interval (seconds) when heat is 0.
-const ATTACK_INTERVAL_BASE: float = 60.0
+## Base cooldown for Activate Perimeter (seconds) at 0 heat.
+const PERIMETER_BASE_COOLDOWN: float = 30.0
 
-## Minimum attack interval (seconds) at maximum heat.
-const ATTACK_INTERVAL_MIN: float = 15.0
+## Maximum cooldown at extreme heat (seconds).
+const PERIMETER_MAX_COOLDOWN: float = 180.0
 
-## Maximum fraction of current data lost on a breach.
-const BREACH_PENALTY: float = 0.10
+## Heat scaling factor for cooldown.
+## At 0 heat: 30s. At 50 heat: 30 + 50*3 = 180s (capped).
+const PERIMETER_HEAT_COOLDOWN_SCALE: float = 3.0
 
-## Maximum attack strength (clamped even at extreme heat).
-const MAX_ATTACK_STRENGTH: float = 0.9
+## Base payout multiplier for Activate Perimeter.
+## Payout = sum(defender_resilience) * heat_multiplier * this_constant
+const PERIMETER_BASE_PAYOUT: float = 100.0
+
+## Heat multiplier on payout: 1.0 + heat * 0.02
+## At 0 heat: 1.0x. At 50 heat: 2.0x. At 100 heat: 3.0x.
+const PERIMETER_HEAT_PAYOUT_SCALE: float = 0.02
+
+## Chance of a "breach event" during Activate Perimeter.
+## Base 5% + heat * 0.1%. At 50 heat: 10%. At 100 heat: 15%.
+## If breach occurs, each defender takes stability damage (0.05-0.15).
+## This is the risk of pushing during high heat.
+const PERIMETER_BREACH_BASE_CHANCE: float = 0.05
+const PERIMETER_BREACH_HEAT_SCALE: float = 0.001
+
+## Stability damage range on breach.
+const PERIMETER_STABILITY_DAMAGE_MIN: float = 0.05
+const PERIMETER_STABILITY_DAMAGE_MAX: float = 0.15
+
+## Passive income tick rate (seconds) - how often we add passive income.
+const PASSIVE_TICK_RATE: float = 1.0
 
 # ---------------------------------------------------------------------------
 # STATE
 # ---------------------------------------------------------------------------
 
 ## Specimens currently assigned as defenders (Array of Strain objects).
-## These are NOT deployed to zones -- they're at home base.
+## These are NOT deployed to zones — they're at home base.
 var defenders: Array[Strain] = []
 
-## Timer counting down to the next attack (seconds).
-var attack_timer: float = 0.0
+## Timer for passive income ticks.
+var _passive_timer: float = 0.0
 
-## The interval for the next attack (calculated from heat).
-var attack_interval: float = ATTACK_INTERVAL_BASE
+## Cooldown timer for Activate Perimeter.
+var _perimeter_cooldown: float = 0.0
 
-## Accumulated data earned from defenses since last reset (for display).
-var defense_data_earned: float = 0.0
+## Whether the Activate Perimeter button is currently on cooldown.
+var _perimeter_on_cooldown: bool = false
 
-## Total attacks resisted (for display/stats).
-var attacks_resisted: int = 0
+## Accumulated passive income earned since last reset (for display).
+var passive_data_earned: float = 0.0
 
-## Total breaches suffered (for display/stats).
-var breaches_suffered: int = 0
+## Total perimeter activations (for stats).
+var perimeter_activations: int = 0
+
+## Total breaches suffered during perimeter activation.
+var perimeter_breaches: int = 0
 
 # ---------------------------------------------------------------------------
 # DEFENDER MANAGEMENT
 # ---------------------------------------------------------------------------
 
 ## Assigns a specimen as a defender. Returns true if successful.
-## Fails if the base is at capacity or the specimen is already a defender
-## or already deployed to a zone (can't be both attacker and defender).
+## Fails if base is at capacity or specimen is already a defender
+## or already deployed to a zone (checked in main.gd).
 func assign_defender(strain: Strain) -> bool:
 	if defenders.size() >= HOME_BASE_CAPACITY:
 		return false
@@ -127,140 +142,181 @@ func get_free_slots() -> int:
 	return HOME_BASE_CAPACITY - defenders.size()
 
 # ---------------------------------------------------------------------------
-# ATTACK TIMER
+# PASSIVE INCOME
 # ---------------------------------------------------------------------------
 
-## Calculates the attack interval based on global heat.
-## At 0 heat: 60 seconds between attacks (quiet)
-## At 50 heat: 30 seconds (moderate)
-## At 100+ heat: 15 seconds (under siege)
-## Formula: interval = max(MIN, BASE - heat * 0.45)
-func calculate_attack_interval(heat: float) -> float:
-	return maxf(ATTACK_INTERVAL_MIN, ATTACK_INTERVAL_BASE - heat * 0.45)
+## Called from main.gd _process(delta). Handles passive income ticks.
+func tick_passive(delta: float) -> float:
+	if defenders.is_empty():
+		return 0.0
 
-## Updates the attack timer. Called from main.gd's _process().
-## Returns true if an attack should trigger this tick, false otherwise.
-## When true, main.gd calls resolve_attack() to process the results.
-func tick(delta: float, global_heat: float) -> bool:
-	# Update the interval based on current heat (it changes as heat rises/falls)
-	attack_interval = calculate_attack_interval(global_heat)
+	_passive_timer += delta
+	if _passive_timer < PASSIVE_TICK_RATE:
+		return 0.0
 
-	# Count down
-	attack_timer += delta
-	if attack_timer >= attack_interval:
-		attack_timer = 0.0
-		return true  # Attack triggers!
-	return false
+	_passive_timer = 0.0
 
-## Forces the attack timer to reset (used when loading a save).
-func reset_timer() -> void:
-	attack_timer = 0.0
-	attack_interval = ATTACK_INTERVAL_BASE
-
-# ---------------------------------------------------------------------------
-# ATTACK RESOLUTION
-# ---------------------------------------------------------------------------
-
-## Resolves an attack on the home base.
-## Returns a Dictionary with the results:
-##   {
-##     "breach": bool,           # True if all defenders failed (or no defenders)
-##     "attack_strength": float, # How strong the attack was (0.1 to 0.9)
-##     "defender_results": Array of Dictionaries, each:
-##       {"strain": Strain, "survived": bool, "roll": float, "reward": float}
-##     "total_reward": float,    # Total data earned from surviving defenders
-##     "breach_penalty": float,  # Data lost if breach (0.0 if no breach)
-##   }
-##
-## Parameters:
-##   global_heat: current total_heat from main.gd (scales attack strength)
-func resolve_attack(global_heat: float) -> Dictionary:
-	# --- GENERATE ATTACK STRENGTH ---
-	# Base random strength 0.1 to 0.5, plus heat scaling
-	var base_strength: float = randf_range(0.1, 0.5)
-	var heat_bonus: float = global_heat * 0.01
-	var attack_strength: float = clampf(base_strength + heat_bonus, 0.1, MAX_ATTACK_STRENGTH)
-
-	# --- RESOLVE EACH DEFENDER ---
-	var defender_results: Array = []
-	var total_reward: float = 0.0
-	var any_survived: bool = false
-	var survivors: Array[Strain] = []  # Track defenders that survive
-
+	# Calculate passive income: sum of (resilience * PASSIVE_INCOME_PER_RESILIENCE)
+	var total_income: float = 0.0
 	for strain in defenders:
-		# Roll: resilience + random luck (same formula as zone raid survival)
-		var roll: float = strain.resilience + randf_range(0.0, 0.3)
-		var survived: bool = roll >= attack_strength
+		total_income += strain.resilience * PASSIVE_INCOME_PER_RESILIENCE
 
-		# Data reward for surviving defenders
-		var reward: float = 0.0
-		if survived:
-			reward = attack_strength * strain.resilience * REWARD_MULTIPLIER
-			total_reward += reward
-			any_survived = true
-			survivors.append(strain)  # This defender lives to fight another day
-		else:
-			print("Defender %s overwhelmed! (roll %.2f vs attack %.2f)" % [strain.strain_name, roll, attack_strength])
+	passive_data_earned += total_income
+	return total_income
 
-		defender_results.append({
-			"strain": strain,
-			"survived": survived,
-			"roll": roll,
-			"reward": reward,
-		})
+## Returns current passive income per second (for UI display).
+func get_passive_income_per_second() -> float:
+	if defenders.is_empty():
+		return 0.0
+	var total: float = 0.0
+	for strain in defenders:
+		total += strain.resilience * PASSIVE_INCOME_PER_RESILIENCE
+	return total
 
-	# Replace defenders array with only the survivors
-	defenders = survivors
+# ---------------------------------------------------------------------------
+# ACTIVATE PERIMETER (Active Boost)
+# ---------------------------------------------------------------------------
 
-	# --- DETERMINE BREACH ---
-	# A breach happens if NO defenders survived (including having zero defenders).
-	# On breach, the player loses a fraction of their data.
-	var breach: bool = not any_survived
-	var breach_penalty: float = 0.0
+## Returns the current cooldown remaining (0.0 if ready).
+func get_perimeter_cooldown_remaining() -> float:
+	return max(0.0, _perimeter_cooldown)
 
-	# Update stats
-	if breach:
-		breaches_suffered += 1
-	else:
-		attacks_resisted += 1
-	defense_data_earned += total_reward
+## Returns true if Activate Perimeter is ready to use.
+func is_perimeter_ready() -> bool:
+	return _perimeter_cooldown <= 0.0 and not defenders.is_empty()
 
-	return {
-		"breach": breach,
-		"attack_strength": attack_strength,
-		"defender_results": defender_results,
-		"total_reward": total_reward,
-		"breach_penalty": breach_penalty,  # Calculated by main.gd (needs player_data)
+## Called from main.gd _process to tick down the perimeter cooldown.
+func tick_perimeter_cooldown(delta: float) -> void:
+	if _perimeter_cooldown > 0.0:
+		_perimeter_cooldown -= delta
+		if _perimeter_cooldown < 0.0:
+			_perimeter_cooldown = 0.0
+
+## Calculates the cooldown based on current global heat.
+## Higher heat = longer cooldown (natural pacing).
+func calculate_perimeter_cooldown(global_heat: float) -> float:
+	var cooldown: float = PERIMETER_BASE_COOLDOWN + global_heat * PERIMETER_HEAT_COOLDOWN_SCALE
+	return clampf(cooldown, PERIMETER_BASE_COOLDOWN, PERIMETER_MAX_COOLDOWN)
+
+## Triggers the Activate Perimeter active boost.
+## Returns a Dictionary with results for UI display:
+##   {
+##     "success": bool,
+##     "payout": float,
+##     "breach_occurred": bool,
+##     "breach_details": Array of { "strain": Strain, "stability_lost": float },
+##     "cooldown_set": float
+##   }
+## Caller (main.gd) should pass current global_heat for scaling.
+func activate_perimeter(global_heat: float) -> Dictionary:
+	var result: Dictionary = {
+		"success": false,
+		"payout": 0.0,
+		"breach_occurred": false,
+		"breach_details": [],
+		"cooldown_set": 0.0
 	}
 
+	# Can't activate if on cooldown or no defenders
+	if not is_perimeter_ready():
+		return result
+
+	# --- CALCULATE PAYOUT ---
+	# Base: sum of defender resilience * PERIMETER_BASE_PAYOUT
+	var total_resilience: float = 0.0
+	for strain in defenders:
+		total_resilience += strain.resilience
+
+	# Heat multiplier: 1.0 + heat * PERIMETER_HEAT_PAYOUT_SCALE
+	var heat_multiplier: float = 1.0 + global_heat * PERIMETER_HEAT_PAYOUT_SCALE
+
+	var payout: float = total_resilience * PERIMETER_BASE_PAYOUT * heat_multiplier
+	result["payout"] = payout
+
+	# --- CHECK FOR BREACH ---
+	# Chance: base + heat * scale
+	var breach_chance: float = PERIMETER_BREACH_BASE_CHANCE + global_heat * PERIMETER_BREACH_HEAT_SCALE
+	breach_chance = clampf(breach_chance, 0.0, 0.5)  # Cap at 50%
+
+	var breach_occurred: bool = randf() < breach_chance
+	result["breach_occurred"] = breach_occurred
+
+	var breach_details: Array = []
+	if breach_occurred:
+		perimeter_breaches += 1
+		# Each defender takes stability damage
+		for strain in defenders:
+			var damage: float = randf_range(PERIMETER_STABILITY_DAMAGE_MIN, PERIMETER_STABILITY_DAMAGE_MAX)
+			var old_stability: float = strain.stability
+			strain.stability = max(0.0, strain.stability - damage)
+			breach_details.append({
+				"strain": strain,
+				"stability_lost": damage,
+				"old_stability": old_stability,
+				"new_stability": strain.stability
+			})
+	result["breach_details"] = breach_details
+
+	# --- SET COOLDOWN ---
+	var cooldown: float = calculate_perimeter_cooldown(global_heat)
+	_perimeter_cooldown = cooldown
+	result["cooldown_set"] = cooldown
+
+	perimeter_activations += 1
+	result["success"] = true
+
+	return result
+
 # ---------------------------------------------------------------------------
-# DISPLAY / UI HELPERS
+# UI / DISPLAY HELPERS
 # ---------------------------------------------------------------------------
 
-## Returns a summary string for the home base status display.
-func get_summary() -> String:
-	var text: String = "HOME BASE\n"
+## Returns a summary string for the home base panel.
+func get_summary(global_heat: float) -> String:
+	var text: String = "HOME BASE DEFENSE\n"
 	text += "Defenders: %d/%d\n" % [defenders.size(), HOME_BASE_CAPACITY]
-
-	# Show next attack timer
-	var time_left: float = maxf(0.0, attack_interval - attack_timer)
-	text += "Next attack: %.0fs\n" % time_left
-
+	text += "Passive Income: %.2f data/sec\n" % get_passive_income_per_second()
+	text += "Total Passive Earned: %.1f data\n" % passive_data_earned
+	text += "\n"
+	text += "ACTIVATE PERIMETER\n"
 	if defenders.is_empty():
-		text += "WARNING: No defenders! Breaches will occur."
+		text += "Assign defenders to enable\n"
+	elif _perimeter_cooldown > 0.0:
+		text += "Cooldown: %.0fs\n" % _perimeter_cooldown
 	else:
-		text += "Defending:\n"
-		for s in defenders:
-			text += "  %s (Resilience: %.0f%%)\n" % [s.strain_name, s.resilience * 100]
+		text += "READY — Click to activate\n"
+		# Show estimated payout
+		var total_resilience: float = 0.0
+		for strain in defenders:
+			total_resilience += strain.resilience
+		var heat_mult: float = 1.0 + global_heat * PERIMETER_HEAT_PAYOUT_SCALE
+		var est_payout: float = total_resilience * PERIMETER_BASE_PAYOUT * heat_mult
+		text += "Est. Payout: %.0f data (%.1fx heat mult)\n" % [est_payout, heat_mult]
+		var breach_chance: float = PERIMETER_BREACH_BASE_CHANCE + global_heat * PERIMETER_BREACH_HEAT_SCALE
+		breach_chance = clampf(breach_chance, 0.0, 0.5)
+		if breach_chance > 0.01:
+			text += "Breach Risk: %.0f%%\n" % (breach_chance * 100)
 
+	text += "\nStats: %d activations, %d breaches" % [perimeter_activations, perimeter_breaches]
 	return text
 
-## Returns a short status string for the containment view.
-func get_short_status() -> String:
-	return "Defenders: %d/%d | Next attack: %.0fs" % [
-		defenders.size(), HOME_BASE_CAPACITY,
-		maxf(0.0, attack_interval - attack_timer)
-	]
+## Returns a short status for the containment view header.
+func get_short_status(global_heat: float) -> String:
+	if defenders.is_empty():
+		return "Home Base: Empty (no passive income)"
+	var passive: float = get_passive_income_per_second()
+	var perimeter_status: String = "Ready" if is_perimeter_ready() else "Cooldown: %.0fs" % _perimeter_cooldown
+	return "Home Base: %d defenders | %.2f data/sec passive | Perimeter: %s" % [defenders.size(), passive, perimeter_status]
+
+## Resets home base state (used on new game).
+func reset() -> void:
+	defenders.clear()
+	_passive_timer = 0.0
+	_perimeter_cooldown = 0.0
+	passive_data_earned = 0.0
+	perimeter_activations = 0
+	perimeter_breaches = 0
+
 
 # ---------------------------------------------------------------------------
 # SERIALIZATION (for save system)
@@ -274,11 +330,11 @@ func serialize() -> Dictionary:
 		defender_names.append(strain.strain_name)
 	return {
 		"defender_names": defender_names,
-		"attack_timer": attack_timer,
-		"attack_interval": attack_interval,
-		"defense_data_earned": defense_data_earned,
-		"attacks_resisted": attacks_resisted,
-		"breaches_suffered": breaches_suffered,
+		"_passive_timer": _passive_timer,
+		"_perimeter_cooldown": _perimeter_cooldown,
+		"passive_data_earned": passive_data_earned,
+		"perimeter_activations": perimeter_activations,
+		"perimeter_breaches": perimeter_breaches,
 	}
 
 ## Reconnects defenders after loading. Finds specimens by name in the
@@ -291,8 +347,8 @@ func deserialize(data: Dictionary, player_strains: Array) -> void:
 			if strain.strain_name == name:
 				defenders.append(strain)
 				break
-	attack_timer = data.get("attack_timer", 0.0)
-	attack_interval = data.get("attack_interval", ATTACK_INTERVAL_BASE)
-	defense_data_earned = data.get("defense_data_earned", 0.0)
-	attacks_resisted = data.get("attacks_resisted", 0)
-	breaches_suffered = data.get("breaches_suffered", 0)
+	_passive_timer = data.get("_passive_timer", 0.0)
+	_perimeter_cooldown = data.get("_perimeter_cooldown", 0.0)
+	passive_data_earned = data.get("passive_data_earned", 0.0)
+	perimeter_activations = data.get("perimeter_activations", 0)
+	perimeter_breaches = data.get("perimeter_breaches", 0)

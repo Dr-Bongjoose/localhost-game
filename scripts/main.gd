@@ -100,6 +100,7 @@ extends Control
 @onready var defender_dropdown: OptionButton = $ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel/DefenderDropdown
 @onready var assign_defender_button: Button = $ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel/AssignDefenderButton
 @onready var recall_defender_button: Button = $ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel/RecallDefenderButton
+@onready var perimeter_button: Button = $ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel/PerimeterButton
 @onready var home_base_action_label: Label = $ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel/HomeBaseActionLabel
 
 # ---------------------------------------------------------------------------
@@ -211,6 +212,7 @@ func _ready() -> void:
 	new_game_button.pressed.connect(_on_new_game_pressed)
 	assign_defender_button.pressed.connect(_on_assign_defender_pressed)
 	recall_defender_button.pressed.connect(_on_recall_defender_pressed)
+	perimeter_button.pressed.connect(_on_perimeter_pressed)
 
 	update_breed_cost_display()
 	_switch_view("containment")
@@ -265,11 +267,7 @@ func _on_new_game_pressed() -> void:
 
 	# Reset home base
 	if home_base != null:
-		home_base.defenders.clear()
-		home_base.reset_timer()
-		home_base.defense_data_earned = 0.0
-		home_base.attacks_resisted = 0
-		home_base.breaches_suffered = 0
+		home_base.reset()
 
 	# Re-enable breed button if it was cooling
 	breed_button.disabled = false
@@ -382,14 +380,22 @@ func _apply_label_colors() -> void:
 # ---------------------------------------------------------------------------
 
 func _process(delta: float) -> void:
-	# --- IDLE INCOME ---
-	# Bugs that are NOT deployed earn ZERO data. They're sitting in
-	# containment doing nothing -- no income, no heat. The only way to earn
-	# data is to actively deploy bugs to zones.
-	# This makes every deployment a meaningful decision, not just "passive income."
-	# (Previously idle strains earned full income -- that made deployment feel
-	# optional and the game felt like a waiting simulator.)
-	var idle_income: float = 0.0  # Always zero -- no idle income anymore
+	# --- PASSIVE HOME BASE INCOME ---
+	# Defenders assigned to home base earn passive data/sec without any risk.
+	# This gives players a reason to keep some strains home instead of
+	# deploying everything to zones.
+	if home_base != null:
+		var passive_income: float = home_base.tick_passive(delta)
+		if passive_income > 0.0:
+			player_data += passive_income
+
+	# --- PERIMETER COOLDOWN ---
+	# Tick down the Activate Perimeter cooldown.
+	if home_base != null:
+		home_base.tick_perimeter_cooldown(delta)
+		# Update perimeter button state if on containment view
+		if current_view == "containment":
+			update_perimeter_button()
 
 	# --- ZONE INCOME + TICKING ---
 	var zone_income: float = 0.0
@@ -402,8 +408,8 @@ func _process(delta: float) -> void:
 			for raid in result["raids"]:
 				raid_notifications.append(raid)
 
-	# Total player income = idle + zone
-	player_data += (idle_income + zone_income) * delta
+	# Total player income = zone + passive (passive already added above)
+	player_data += zone_income * delta
 
 	# --- GLOBAL HEAT ---
 	# Global heat comes ONLY from strains deployed to zones (they're actively
@@ -452,27 +458,16 @@ func _process(delta: float) -> void:
 		_save_game()
 
 	# --- RAID ALERT FADE ---
-	# If the raid alert overlay is visible, count down the timer and hide it
-	# when it reaches zero. This auto-dismisses the alert after RAID_ALERT_DURATION
-	# seconds so the player doesn't have to click anything.
-	if _raid_alert_timer > 0.0:
-		_raid_alert_timer -= delta
-		if _raid_alert_timer <= 0.0:
-			_raid_alert_timer = 0.0
-			raid_alert_overlay.visible = false
+		# If the raid alert overlay is visible, count down the timer and hide it
+		# when it reaches zero. This auto-dismisses the alert after RAID_ALERT_DURATION
+		# seconds so the player doesn't have to click anything.
+		if _raid_alert_timer > 0.0:
+			_raid_alert_timer -= delta
+			if _raid_alert_timer <= 0.0:
+				_raid_alert_timer = 0.0
+				raid_alert_overlay.visible = false
 
-	# --- HOME BASE DEFENSE ---
-	# Tick the home base attack timer. When it fires, resolve an attack.
-	# If the attack succeeds (no breach), the player earns data from defenders.
-	# If it breaches (no defenders or all fail), the player loses data.
-	if home_base != null:
-		if home_base.tick(delta, total_heat):
-			_resolve_home_base_attack()
-		# Update the home base UI (attack countdown, defender status)
-		if current_view == "containment":
-			update_home_base_display()
-
-
+		# --- AUTO-SAVE ---
 # ---------------------------------------------------------------------------
 # VIEW SWITCHING
 # ---------------------------------------------------------------------------
@@ -1041,7 +1036,7 @@ func update_home_base_display() -> void:
 	if home_base == null:
 		home_base_info.text = "Home base not initialized"
 		return
-	home_base_info.text = home_base.get_summary()
+	home_base_info.text = home_base.get_summary(total_heat)
 
 	# Update button states based on selected bug
 	var selected: Strain = _get_selected_defender_strain()
@@ -1109,7 +1104,7 @@ func _on_recall_defender_pressed() -> void:
 	var selected: Strain = _get_selected_defender_strain()
 	if selected == null:
 		return
-	
+
 	if home_base.recall_defender(selected):
 		home_base_action_label.text = "Recalled %s from defense" % selected.strain_name
 		update_strain_display()
@@ -1120,42 +1115,63 @@ func _on_recall_defender_pressed() -> void:
 		home_base_action_label.text = "Bug is not assigned as defender"
 
 
-## Resolves a home base attack: defenders roll resilience vs attack strength.
-## Successful defenses earn data. Breaches lose data.
-func _resolve_home_base_attack() -> void:
-	var result: Dictionary = home_base.resolve_attack(total_heat)
+## Updates the Activate Perimeter button state based on cooldown and defenders.
+func update_perimeter_button() -> void:
+	if home_base == null:
+		perimeter_button.disabled = true
+		perimeter_button.text = "Activate Perimeter"
+		return
 
-	# Award data from successful defenses
-	if result["total_reward"] > 0:
-		player_data += result["total_reward"]
-
-	# Handle breach -- player loses data
-	if result["breach"]:
-		var penalty: float = floor(player_data * HomeBase.BREACH_PENALTY)
-		player_data -= penalty
-		var breach_msg: String = "HOME BASE BREACH!\nLost %d data" % int(penalty)
-		if home_base.is_empty():
-			breach_msg += "\nNo defenders assigned!"
-		_show_raid_alert(breach_msg, true)
-		print("Home base breach! Lost %d data (attack strength: %.2f)" % [int(penalty), result["attack_strength"]])
+	if home_base.is_empty():
+		perimeter_button.disabled = true
+		perimeter_button.text = "Assign Defenders First"
+	elif not home_base.is_perimeter_ready():
+		perimeter_button.disabled = true
+		var remaining: float = home_base.get_perimeter_cooldown_remaining()
+		perimeter_button.text = "Perimeter Cooldown: %.0fs" % remaining
 	else:
-		# Show a defense alert
-		var defense_msg: String = "Home base defended!\nEarned %d data" % int(result["total_reward"])
-		# Show which defenders survived/fell
-		for d in result["defender_results"]:
-			var s: Strain = d["strain"]
-			if d["survived"]:
-				defense_msg += "\n  %s held ( +%d )" % [s.strain_name, int(d["reward"])]
-			else:
-				defense_msg += "\n  %s was overwhelmed!" % s.strain_name
-		_show_raid_alert(defense_msg, false)
-		print("Home base defended! Earned %d data (attack: %.2f)" % [int(result["total_reward"]), result["attack_strength"]])
+		perimeter_button.disabled = false
+		perimeter_button.text = "Activate Perimeter"
+
+
+## Triggers the Activate Perimeter active boost when player clicks the button.
+func _on_perimeter_pressed() -> void:
+	if home_base == null:
+		return
+
+	var result: Dictionary = home_base.activate_perimeter(total_heat)
+
+	if not result["success"]:
+		home_base_action_label.text = "Perimeter not ready"
+		return
+
+	# Award the payout
+	player_data += result["payout"]
+
+	# Build feedback message
+	var msg: String = "PERIMETER ACTIVATED!\nEarned %d data" % int(result["payout"])
+
+	if result["breach_occurred"]:
+		msg += "\n\nBREACH EVENT! Defenders took stability damage:"
+		for detail in result["breach_details"]:
+			var s: Strain = detail["strain"]
+			msg += "\n  %s: stability %.0f%% -> %.0f%%" % [
+				s.strain_name,
+				detail["old_stability"] * 100,
+				detail["new_stability"] * 100
+			]
+		_show_raid_alert(msg, true)
+	else:
+		msg += "\nAll defenders held the line."
+		_show_raid_alert(msg, false)
 
 	# Update UI
 	update_home_base_display()
 	update_strain_display()
 	update_strain_list()
 	update_defender_dropdown()
+	update_perimeter_button()
+	update_data_display()
 
 
 # ---------------------------------------------------------------------------

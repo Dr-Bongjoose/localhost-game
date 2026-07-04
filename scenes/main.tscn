@@ -267,6 +267,14 @@ offset_right = 280.0
 offset_bottom = 195.0
 text = "Recall All Defenders"
 
+[node name="PerimeterButton" type="Button" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel"]
+layout_mode = 0
+offset_left = 300.0
+offset_top = 160.0
+offset_right = 500.0
+offset_bottom = 195.0
+text = "Activate Perimeter"
+
 [node name="HomeBaseActionLabel" type="Label" parent="ScrollContainer/MarginContainer/VBox/ContainmentView/HomeBasePanel"]
 layout_mode = 0
 offset_left = 300.0
