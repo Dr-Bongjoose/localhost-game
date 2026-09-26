@@ -37,10 +37,26 @@ func _init() -> void:
 	s2.strain_name = "Beta-002"
 	strains.append(s2)
 
-	# Breed a child
+	# Breed a child.
+	# NOTE: breed() rolls a random failure (base 5% + 5% gen-gap + instability
+	# penalty, capped 30%). s2 = create_random(2) has random stability
+	# (0.3-0.9), so a low-stability roll can return null and this test used to
+	# crash on s3.strain_name (the observed CI flake). Breeding is
+	# probabilistic by design, so the test retries a few times instead of
+	# asserting an impossible 100% success rate. All-fail odds: <= 0.17^10.
 	var s3: Strain = Breeding.breed(s1, s2)
+	var breed_attempts: int = 1
+	while s3 == null and breed_attempts < 10:
+		s3 = Breeding.breed(s1, s2)
+		breed_attempts += 1
+	if s3 == null:
+		print("  FAIL: breed returned null 10x (p <= 0.17^10) -- investigate")
+		all_passed = false
+		quit()
+		return
 	s3.strain_name = "Gamma-003"
 	strains.append(s3)
+	print("  breeding succeeded after %d attempt(s)" % breed_attempts)
 
 	var game_codex: Codex = Codex.new()
 	for s in strains:
