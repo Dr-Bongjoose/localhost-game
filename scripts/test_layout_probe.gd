@@ -43,6 +43,34 @@ func _init() -> void:
 			tl.x, tl.y, br.x, br.y, node.is_visible_in_tree()])
 	var sc: ScrollContainer = main.get_node("ScrollContainer")
 	print("SCROLL_VERTICAL=", sc.scroll_vertical)
+	# Zones-view state measurement: the leg taps ZonesView controls AFTER
+	# switching to the Zones tab. Containers skip hidden children in layout,
+	# so rects measured while ZonesView is hidden are NOT the live ones.
+	# Switch, let layout settle, measure with a ZONED prefix, switch back.
+	main._switch_view("zones")
+	main.update_zone_display()
+	main.update_deploy_dropdown()
+	for i in range(8):
+		await process_frame
+	var zone_names := [
+		"ScrollContainer/MarginContainer/VBox/ZonesView/ZoneDeployPanel/DeployDropdown",
+		"ScrollContainer/MarginContainer/VBox/ZonesView/ZoneDeployPanel/DeployButton",
+		"ScrollContainer/MarginContainer/VBox/ZonesView/ZoneDeployPanel/RecallButton",
+	]
+	for n in zone_names:
+		var znode = main.get_node_or_null(n)
+		if znode == null:
+			print("ZONED MISSING ", n)
+			continue
+		var zr: Rect2 = znode.get_global_rect()
+		var ztl: Vector2 = ft * zr.position
+		var zbr: Vector2 = ft * (zr.position + zr.size)
+		print("ZONED RECT %s canvas=(%.0f,%.0f)-(%.0f,%.0f) physical=(%.0f,%.0f)-(%.0f,%.0f) visible=%s" % [
+			n.get_file(), zr.position.x, zr.position.y, zr.end.x, zr.end.y,
+			ztl.x, ztl.y, zbr.x, zbr.y, znode.is_visible_in_tree()])
+	main._switch_view("containment")
+	for i in range(8):
+		await process_frame
 	# Trigger the BACK-key confirm dialog and probe its live window + buttons.
 	main._show_exit_confirm()
 	for i in range(8):
