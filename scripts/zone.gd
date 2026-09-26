@@ -8,6 +8,8 @@
 #   CORPORATE SERVER  -- Medium security, medium payout. Need decent stealth.
 #   GOVERNMENT NET    -- High security, high payout. Very risky but rewarding.
 #   DARK WEB NODE     -- Unpredictable. Can be great or terrible. Chaotic.
+#   ABANDONED SERVERS -- Low security, lowest payout. Safest. Lay low here
+#                        when global heat runs high (docs/ZONE_HEAT_SYSTEM.md).
 #
 # HOW ZONES WORK:
 # - You deploy a strain from your collection to a zone
@@ -38,6 +40,8 @@ enum ZoneType {
 	CORPORATE,     ## Medium security, medium payout. Need decent stealth.
 	GOVERNMENT,   ## High security, high payout. Very risky.
 	DARK_WEB,     ## Unpredictable. Variable everything.
+	CRITICAL_INFRA,  ## Highest security, highest payout. Raises global threat.
+	ABANDONED,    ## Low security, low payout. Safest zone. Lays low when hot.
 }
 
 # ---------------------------------------------------------------------------
@@ -125,6 +129,17 @@ func _init_type_properties() -> void:
 			detection_threshold = randf_range(20.0, 80.0)
 			capacity = 2
 
+		ZoneType.ABANDONED:
+			# Design intent (docs/ZONE_HEAT_SYSTEM.md): "Safe. Good for laying
+			# low when heat is high." It's the most forgiving zone in the game:
+			# worst payout, but the slowest detection, the highest raid
+			# threshold, and the most room to hide strains in.
+			zone_name = "Abandoned Servers"
+			data_value = 1.5          # 1.5x income -- lowest payout (the price of safety)
+			detection_rate = 0.25     # Nobody's watching. Heat rises 4x slower than Corporate.
+			detection_threshold = 100.0  # Tolerant -- raids almost never happen here
+			capacity = 4              # Plenty of dead racks to hide bugs in
+
 # ---------------------------------------------------------------------------
 # DEPLOYMENT
 # ---------------------------------------------------------------------------
@@ -203,8 +218,16 @@ func tick(delta: float) -> Dictionary:
 		# Raid probability: how far over threshold determines raid chance.
 		# At exactly the threshold: 2% chance per second of a raid.
 		# At 2x the threshold: 4% chance per second.
+		#
+		# Safe-zone cap (JOO-22): Abandoned Servers is designed as the "lay
+		# low" retreat (docs/ZONE_HEAT_SYSTEM.md). The zone's LOW detection
+		# rate also caps the raid chance: nobody patrols here, so even extreme
+		# heat produces at most a 2%/sec raid roll (vs 6%/sec uncapped) --
+		# and surviving one is nearly guaranteed (security factor 0.3).
 		var over_factor: float = zone_heat / detection_threshold
 		var raid_chance: float = 0.02 * over_factor * delta  # per-second scaled by delta
+		if zone_type == ZoneType.ABANDONED:
+			raid_chance = minf(raid_chance, 0.02 * delta)
 
 		if randf() < raid_chance:
 			# A raid happens! Pick a random deployed strain to target.
@@ -214,9 +237,10 @@ func tick(delta: float) -> Dictionary:
 			# Resilience check: the strain rolls its resilience vs the zone's
 			# security level. The zone_security_factor is scaled so it's
 			# comparable to resilience (0.0-1.0 range).
-			# detection_rate ranges: 0.5 (Consumer) to 2.0 (Government)
+			# detection_rate ranges: 0.25 (Abandoned) to 2.0 (Government)
 			# We map it to a 0.3-0.8 survival difficulty range so that:
-			#   - Consumer (det=0.5): factor=0.3, weak strains can survive
+			#   - Abandoned (det=0.25): factor=0.275, clamped to 0.3 -- weak strains survive
+			#   - Consumer (det=0.5): factor=0.35, weak strains can survive
 			#   - Corporate (det=1.0): factor=0.5, need decent resilience
 			#   - Government (det=2.0): factor=0.8, need high resilience + luck
 			# Dark Web is variable.
@@ -277,6 +301,8 @@ func get_type_name() -> String:
 			return "Government Network"
 		ZoneType.DARK_WEB:
 			return "Dark Web Node"
+		ZoneType.ABANDONED:
+			return "Abandoned Servers"
 		_:
 			return "Unknown"
 
@@ -291,6 +317,8 @@ func get_risk_label() -> String:
 			return "High Risk"
 		ZoneType.DARK_WEB:
 			return "Unpredictable"
+		ZoneType.ABANDONED:
+			return "Low Risk"
 		_:
 			return "Unknown"
 
@@ -305,6 +333,8 @@ func get_risk_color() -> Color:
 			return Color(0.8, 0.3, 0.3)    # Deep crimson -- danger
 		ZoneType.DARK_WEB:
 			return Color(0.6, 0.4, 0.7)   # Bruised purple -- chaotic
+		ZoneType.ABANDONED:
+			return Color(0.45, 0.55, 0.58)  # Ashen grey-teal -- dormant, cold
 		_:
 			return Color(0.5, 0.5, 0.5)
 

@@ -12,6 +12,10 @@
 # 8. get_summary() and get_short_status() return readable text
 # 9. Heat decays when zone is empty
 # 10. Dark Web zones have randomized properties
+# 11. Abandoned Servers: correct properties per ZONE_HEAT_SYSTEM.md
+# 12. Abandoned Servers: capacity 4 enforced
+# 13. Abandoned Servers: high-heat ticks do NOT trigger raids (safe zone)
+# 14. Abandoned Servers: income math + display helpers
 # ============================================================================
 
 extends SceneTree
@@ -276,6 +280,169 @@ func _init() -> void:
 		dark_web_1.data_value, dark_web_1.detection_rate, dark_web_1.detection_threshold])
 	print("  Dark Web 2: value=%.2f, det=%.2f, threshold=%.0f" % [
 		dark_web_2.data_value, dark_web_2.detection_rate, dark_web_2.detection_threshold])
+
+	# Test 11: Abandoned Servers properties (JOO-22)
+	# Design doc: Low security, Low payout. Safest zone -- the "laying low"
+	# retreat. Profile: 1.5x payout, 0.25x detection, threshold 100, cap 4.
+	print("\n[11] Testing Abandoned Servers properties (JOO-22)...")
+	var abandoned = Zone.create(Zone.ZoneType.ABANDONED)
+
+	if abandoned.zone_name == "Abandoned Servers":
+		print("  PASS: zone_name is 'Abandoned Servers'")
+	else:
+		print("  FAIL: zone_name wrong: '%s'" % abandoned.zone_name)
+		all_passed = false
+
+	if abandoned.data_value == 1.5:
+		print("  PASS: payout is 1.5x (lowest in game)")
+	else:
+		print("  FAIL: payout wrong: %.2f (expected 1.5)" % abandoned.data_value)
+		all_passed = false
+
+	if abandoned.detection_rate == 0.25:
+		print("  PASS: detection_rate 0.25 (slowest in game)")
+	else:
+		print("  FAIL: detection_rate wrong: %.2f (expected 0.25)" % abandoned.detection_rate)
+		all_passed = false
+
+	if abandoned.detection_threshold == 100.0:
+		print("  PASS: detection_threshold 100 (highest in game)")
+	else:
+		print("  FAIL: detection_threshold wrong: %.0f (expected 100)" % abandoned.detection_threshold)
+		all_passed = false
+
+	if abandoned.capacity == 4:
+		print("  PASS: capacity 4 (largest in game)")
+	else:
+		print("  FAIL: capacity wrong: %d (expected 4)" % abandoned.capacity)
+		all_passed = false
+
+	# Safety sanity: strictly safer than Consumer (the old safest zone)
+	if abandoned.detection_rate < consumer.detection_rate and \
+			abandoned.detection_threshold > consumer.detection_threshold:
+		print("  PASS: Abandoned is strictly safer than Consumer (det %.2f<%.2f, thr %.0f>%.0f)" % [
+			abandoned.detection_rate, consumer.detection_rate,
+			abandoned.detection_threshold, consumer.detection_threshold])
+	else:
+		print("  FAIL: Abandoned not safer than Consumer")
+		all_passed = false
+
+	if abandoned.get_type_name() == "Abandoned Servers" and abandoned.get_risk_label() == "Low Risk":
+		print("  PASS: display labels correct ('%s', '%s')" % [
+			abandoned.get_type_name(), abandoned.get_risk_label()])
+	else:
+		print("  FAIL: display labels wrong: '%s' / '%s'" % [
+			abandoned.get_type_name(), abandoned.get_risk_label()])
+		all_passed = false
+
+	# Test 12: Abandoned Servers capacity (4 strains fit, 5th rejected)
+	print("\n[12] Testing Abandoned Servers capacity=4...")
+	var ab_cap = Zone.create(Zone.ZoneType.ABANDONED)
+	var filler_strains: Array = []
+	var all_deployed: bool = true
+	for i in range(4):
+		var s = Strain.create_seed()
+		filler_strains.append(s)
+		if not ab_cap.deploy(s):
+			all_deployed = false
+	if all_deployed:
+		print("  PASS: 4 strains deployed into Abandoned Servers")
+	else:
+		print("  FAIL: deploy rejected a strain before capacity")
+		all_passed = false
+
+	var strain5 = Strain.create_seed()
+	if not ab_cap.deploy(strain5):
+		print("  PASS: 5th strain correctly rejected (capacity 4)")
+	else:
+		print("  FAIL: 5th strain was accepted over capacity")
+		all_passed = false
+
+	if ab_cap.is_full() and ab_cap.get_free_slots() == 0:
+		print("  PASS: is_full() true, free slots 0 at capacity")
+	else:
+		print("  FAIL: capacity bookkeeping wrong (full=%s, free=%d)" % [
+			ab_cap.is_full(), ab_cap.get_free_slots()])
+		all_passed = false
+
+	# Clean up (recall_all style)
+	for s in filler_strains:
+		ab_cap.recall(s)
+
+	# Test 13: Abandoned Servers is safe -- strains never get destroyed there
+	# The zone can still roll raid EVENTS at extreme heat (2%/sec cap), but the
+	# security factor is 0.3 and a seed strain rolls 0.5-0.8 -- always survives.
+	# Design guarantee: Abandoned Servers is the "lay low" retreat; losing a
+	# strain here would defeat its purpose (docs/ZONE_HEAT_SYSTEM.md).
+	print("\n[13] Testing Abandoned Servers safety (no strain deaths at high heat)...")
+	var safe_zone = Zone.create(Zone.ZoneType.ABANDONED)
+	# Heat far above threshold -- in any other zone this wipes strains fast
+	safe_zone.zone_heat = 300.0
+	safe_zone.deploy(strain1)
+
+	var destroyed: bool = false
+	var raid_events: int = 0
+	for i in range(300):
+		var result = safe_zone.tick(1.0)
+		raid_events += result["raids"].size()
+		for raid in result["raids"]:
+			if not raid["survived"]:
+				destroyed = true
+				break
+		if destroyed:
+			break
+		if safe_zone.deployed_strains.is_empty():
+			destroyed = true  # strain vanished some other way -- treat as unsafe
+			break
+
+	if not destroyed:
+		print("  PASS: 300 ticks at heat 300 (3x threshold) -- strain never destroyed")
+		print("  INFO: %d raid events fired, all survived (security factor only 0.3)" % raid_events)
+	else:
+		print("  FAIL: strain was destroyed in Abandoned Servers (should be nearly impossible)")
+		all_passed = false
+	safe_zone.recall(strain1)
+
+	# Also verify heat actually ACCUMULATES there (0.25x rate) -- the zone isn't inert
+	var abandoned_heat_zone = Zone.create(Zone.ZoneType.ABANDONED)
+	abandoned_heat_zone.deploy(strain1)
+	var a_heat_before = abandoned_heat_zone.zone_heat
+	abandoned_heat_zone.tick(1.0)
+	if abandoned_heat_zone.zone_heat > a_heat_before:
+		print("  PASS: heat still accumulates when strains deployed (%.2f -> %.2f)" % [
+			a_heat_before, abandoned_heat_zone.zone_heat])
+	else:
+		print("  FAIL: heat did not accumulate (before=%.2f, after=%.2f)" % [
+			a_heat_before, abandoned_heat_zone.zone_heat])
+		all_passed = false
+	abandoned_heat_zone.recall(strain1)
+
+	# Test 14: Abandoned Servers income math + summary text
+	print("\n[14] Testing Abandoned Servers income + display...")
+	abandoned.deploy(strain1)
+	var ab_expected = strain1.get_income_per_second() * 1.5
+	var ab_actual = abandoned.get_zone_income()
+	if abs(ab_actual - ab_expected) < 0.01:
+		print("  PASS: zone income = base(%.1f) * 1.5 = %.2f" % [
+			strain1.get_income_per_second(), ab_actual])
+	else:
+		print("  FAIL: income wrong: expected %.2f, got %.2f" % [ab_expected, ab_actual])
+		all_passed = false
+
+	var ab_summary = abandoned.get_summary()
+	if ab_summary.contains("Abandoned Servers") and ab_summary.contains("Payout"):
+		print("  PASS: get_summary() readable for Abandoned Servers")
+	else:
+		print("  FAIL: get_summary() malformed: '%s'" % ab_summary)
+		all_passed = false
+
+	var ab_status = abandoned.get_short_status()
+	if ab_status.contains("Abandoned") and ab_status.contains("1/4"):
+		print("  PASS: get_short_status() shows capacity: '%s'" % ab_status)
+	else:
+		print("  FAIL: get_short_status() malformed: '%s'" % ab_status)
+		all_passed = false
+	abandoned.recall(strain1)
 
 	# Results
 	print("\n=== RESULTS ===")

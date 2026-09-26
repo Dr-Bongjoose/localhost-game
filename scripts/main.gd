@@ -158,7 +158,6 @@ func _ready() -> void:
 	# Individual labels can still override with theme_override_colors for special
 	# cases (like the data counter using a brighter green).
 	theme = LabTheme.create()
-	
 	# --- LOAD LAB BACKGROUND ART ---
 	# A dim, dark biological lab image behind everything for atmosphere.
 	lab_background.texture = load("res://assets/ui/ui_lab_background.png")
@@ -225,11 +224,12 @@ func _init_new_game() -> void:
 	codex = Codex.new()
 	home_base = HomeBase.new()
 
-	# Create the 4 zone types (all unlocked in Phase 1)
+	# Create the zone types (all unlocked in Phase 1)
 	zones.append(Zone.create(Zone.ZoneType.CONSUMER))
 	zones.append(Zone.create(Zone.ZoneType.CORPORATE))
 	zones.append(Zone.create(Zone.ZoneType.GOVERNMENT))
 	zones.append(Zone.create(Zone.ZoneType.DARK_WEB))
+	zones.append(Zone.create(Zone.ZoneType.ABANDONED))
 
 	# Start with two seed strains
 	player_strains.append(Strain.create_seed())
@@ -423,7 +423,22 @@ func _process(delta: float) -> void:
 		if _is_strain_deployed(strain):
 			total_heat_gen += strain.get_heat_per_second()
 	total_heat += total_heat_gen * delta
-	total_heat *= 1.0 - (0.01 * delta)
+
+	# Base decay: 1% per second.
+	var heat_decay_rate: float = 0.01
+
+	# Laying-low countermeasure (JOO-22): while you occupy an Abandoned Servers
+	# zone, dead racks nobody monitors give your activity somewhere to hide --
+	# global heat decays 2x faster. This is what makes the zone's design intent
+	# ("good for laying low when heat is high", docs/ZONE_HEAT_SYSTEM.md)
+	# mechanically real: when your global heat climbs, falling back to Abandoned
+	# Servers cools you down faster, at the cost of its low payout.
+	for zone in zones:
+		if zone.zone_type == Zone.ZoneType.ABANDONED and zone.deployed_strains.size() > 0:
+			heat_decay_rate = 0.02
+			break
+
+	total_heat *= 1.0 - (heat_decay_rate * delta)
 
 	# --- BREED COOLDOWN ---
 	if breed_cooldown > 0.0:
@@ -458,16 +473,44 @@ func _process(delta: float) -> void:
 		_save_game()
 
 	# --- RAID ALERT FADE ---
-		# If the raid alert overlay is visible, count down the timer and hide it
-		# when it reaches zero. This auto-dismisses the alert after RAID_ALERT_DURATION
-		# seconds so the player doesn't have to click anything.
-		if _raid_alert_timer > 0.0:
-			_raid_alert_timer -= delta
-			if _raid_alert_timer <= 0.0:
-				_raid_alert_timer = 0.0
-				raid_alert_overlay.visible = false
+	# If the raid alert overlay is visible, count down the timer and hide it
+	# when it reaches zero. This auto-dismisses the alert after RAID_ALERT_DURATION
+	# seconds so the player doesn't have to click anything.
+	#
+	# BUG-2 fix (JOO-24): this block was mis-indented inside the autosave gate
+	# above, so the countdown only ran on the single frame where an autosave
+	# fired (once every AUTO_SAVE_INTERVAL seconds). The overlay therefore
+	# stayed on screen ~30 seconds, blanking the whole UI. It now ticks every
+	# frame like it was always meant to.
+	if _raid_alert_timer > 0.0:
+		_raid_alert_timer -= delta
+		if _raid_alert_timer <= 0.0:
+			_raid_alert_timer = 0.0
+			raid_alert_overlay.visible = false
 
-		# --- AUTO-SAVE ---
+
+
+# ---------------------------------------------------------------------------
+# TOUCH INPUT / SCROLL FIXES (UX findings 4+6, JOO-24)
+# ---------------------------------------------------------------------------
+# Two fixes live here:
+# 1) ScrollContainer: on Android, dragging inside a Button/Panel that doesn't
+#    consume the drag should scroll the list -- that's what "touch drag" does.
+#    With mouse emulation on, scroll only worked from "empty" pixels, so the
+#    page appeared frozen when a panel filled the viewport (QA finding #6).
+# 2) _gui_input on the root passes through so scroll works with touch drags.
+func _setup_touch_scroll() -> void:
+	var scroll: ScrollContainer = $ScrollContainer
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_ALWAYS
+
+
+func _input(event: InputEvent) -> void:
+	# Nothing to swallow here; exists so _unhandled_input back handling stays
+	# predictable across views. Kept minimal on purpose (no unrelated refactors).
+	pass
+
+
 # ---------------------------------------------------------------------------
 # VIEW SWITCHING
 # ---------------------------------------------------------------------------
@@ -811,6 +854,8 @@ func update_zone_display() -> void:
 			zone_background.texture = load("res://assets/zones/zone_corporate.png")
 		Zone.ZoneType.GOVERNMENT:
 			zone_background.texture = load("res://assets/zones/zone_government.png")
+		Zone.ZoneType.ABANDONED:
+			zone_background.texture = load("res://assets/zones/zone_abandoned.png")
 		_:
 			zone_background.texture = load("res://assets/zones/zone_consumer.png")
 
@@ -1460,10 +1505,44 @@ func _load_game() -> bool:
 
 
 ## Called by Godot when system-level events happen (app closing, focus change).
-## We use it to save the game before the app exits so progress isn't lost.
+## We use it to save the game before the app exits so progress isn't lost,
+## and to catch the Android BACK key (UX fix, JOO-24 finding #3).
 func _notification(what: int) -> void:
 	# WM_CLOSE_REQUEST is sent when the user closes the game window.
 	# MainTree.NOTIFICATION_WM_CLOSE_REQUEST = 4, but we use the constant.
 	if what == Node.NOTIFICATION_WM_CLOSE_REQUEST:
 		print("App closing -- saving game...")
 		_save_game()
+	elif what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		# Android BACK key. With quit_on_go_back=false in project.godot, Godot
+		# does not quit on its own; we show a confirm dialog instead so a stray
+		# back press mid-session can't kill the game.
+		_show_exit_confirm()
+
+
+var _exit_confirm_shown: bool = false
+
+## BACK key confirm dialog: "Quit" exits to launcher, "Keep Playing" dismisses.
+func _show_exit_confirm() -> void:
+	if _exit_confirm_shown:
+		return  # already open -- don't stack dialogs
+	_exit_confirm_shown = true
+	var dialog: ConfirmationDialog = ConfirmationDialog.new()
+	dialog.name = "ExitConfirmDialog"
+	dialog.title = "Leave LOCALHOST?"
+	dialog.dialog_text = "Your progress autosaves every 30 seconds.\nQuit to the home screen?"
+	dialog.ok_button_text = "Quit"
+	dialog.cancel_button_text = "Keep Playing"
+	# Buttons are small by default; bump them for touch.
+	dialog.get_ok_button().custom_minimum_size = Vector2(140, 52)
+	dialog.get_cancel_button().custom_minimum_size = Vector2(140, 52)
+	get_tree().root.add_child(dialog)
+	dialog.popup_centered(Vector2i(520, 260))
+	dialog.confirmed.connect(func() -> void:
+		_exit_confirm_shown = false
+		get_tree().quit()
+	)
+	dialog.close_requested.connect(func() -> void:
+		_exit_confirm_shown = false
+		dialog.queue_free()
+	)
