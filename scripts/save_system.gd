@@ -329,10 +329,16 @@ static func reconnect_deployed_strains(zones: Array[Zone], player_strains: Array
 		strain_by_name[strain.strain_name] = strain
 
 	# For each zone, find the strains by name and deploy them
+	# Note: zones may be LONGER than zone_data -- main.gd migrates saves by
+	# appending zones added after the save was made (JOO-21). Migrated zones
+	# have no saved data, so they start empty (treat missing entries as no
+	# deployed strains).
 	var deploy_map: Dictionary = {}
 	for i in range(zones.size()):
 		var zone: Zone = zones[i]
-		var saved_names: Array = zone_data[i].get("deployed_strain_names", [])
+		var saved_names: Array = []
+		if i < zone_data.size():
+			saved_names = zone_data[i].get("deployed_strain_names", [])
 
 		for name in saved_names:
 			if strain_by_name.has(name):

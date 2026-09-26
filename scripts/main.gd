@@ -231,6 +231,7 @@ func _init_new_game() -> void:
 	zones.append(Zone.create(Zone.ZoneType.GOVERNMENT))
 	zones.append(Zone.create(Zone.ZoneType.DARK_WEB))
 	zones.append(Zone.create(Zone.ZoneType.ABANDONED))
+	zones.append(Zone.create(Zone.ZoneType.CRITICAL_INFRA))
 
 	# Start with two seed strains
 	player_strains.append(Strain.create_seed())
@@ -423,7 +424,10 @@ func _process(delta: float) -> void:
 	for strain in player_strains:
 		if _is_strain_deployed(strain):
 			total_heat_gen += strain.get_heat_per_second()
-	total_heat += total_heat_gen * delta
+
+	# Gain multiplier: normally 1.0. Occupying Critical Infrastructure (JOO-21)
+	# raises it to 1.5 (set by the scan below).
+	var heat_gain_multiplier: float = 1.0
 
 	# Base decay: 1% per second.
 	var heat_decay_rate: float = 0.01
@@ -439,7 +443,18 @@ func _process(delta: float) -> void:
 			heat_decay_rate = 0.02
 			break
 
-	total_heat *= 1.0 - (heat_decay_rate * delta)
+	# Global-threat countermeasure (JOO-21): Critical Infrastructure is the
+	# grid every security AI watches ("Dramatically raises global threat
+	# level", docs/ZONE_HEAT_SYSTEM.md). While you occupy it, everything your
+	# strains do draws 1.5x attention -- GLOBAL heat gains are multiplied by
+	# 1.5, on top of the zone's own brutal local detection_rate (3.0). The
+	# trade: its 8x payout is the best on the network. Push hard, pay the heat.
+	for zone in zones:
+		if zone.zone_type == Zone.ZoneType.CRITICAL_INFRA and zone.deployed_strains.size() > 0:
+			heat_gain_multiplier = 1.5
+			break
+
+	total_heat += total_heat_gen * heat_gain_multiplier * delta
 
 	# --- BREED COOLDOWN ---
 	if breed_cooldown > 0.0:
@@ -852,6 +867,8 @@ func update_zone_display() -> void:
 			zone_background.texture = load("res://assets/zones/zone_government.png")
 		Zone.ZoneType.ABANDONED:
 			zone_background.texture = load("res://assets/zones/zone_abandoned.png")
+		Zone.ZoneType.CRITICAL_INFRA:
+			zone_background.texture = load("res://assets/zones/zone_critical.png")
 		_:
 			zone_background.texture = load("res://assets/zones/zone_consumer.png")
 
@@ -1470,6 +1487,21 @@ func _load_game() -> bool:
 	zones.clear()
 	for zone_data in saved_zones:
 		zones.append(SaveSystem.deserialize_zone(zone_data))
+
+	# --- SAVE MIGRATION: add zones added after a save was made (JOO-21) ---
+	# Older saves were written before Critical Infrastructure existed, so
+	# their zones array lacks it. Instead of forcing those players to wipe
+	# progress, append any missing zone types at the end of the list.
+	# (Abandoned Servers shipped in JOO-22; it had the same migration gap,
+	# so this covers both. Future zone types: add them to this list.)
+	var _known_types: Array[int] = []
+	for z in zones:
+		_known_types.append(z.zone_type)
+	for zt in [Zone.ZoneType.ABANDONED, Zone.ZoneType.CRITICAL_INFRA]:
+		if not _known_types.has(zt):
+			var migrated_zone: Zone = Zone.create(zt)
+			zones.append(migrated_zone)
+			print("Save migration: added missing zone type %s" % migrated_zone.zone_name)
 
 	# --- RECONNECT DEPLOYED STRAINS ---
 	# Zones saved the NAMES of deployed strains. Now we find the actual

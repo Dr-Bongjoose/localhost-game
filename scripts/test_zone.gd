@@ -16,6 +16,10 @@
 # 12. Abandoned Servers: capacity 4 enforced
 # 13. Abandoned Servers: high-heat ticks do NOT trigger raids (safe zone)
 # 14. Abandoned Servers: income math + display helpers
+# 15. Critical Infrastructure: correct properties per ZONE_HEAT_SYSTEM.md
+# 16. Critical Infrastructure: capacity 1 enforced
+# 17. Critical Infrastructure: high-security raid -- weak strains die, tough survive
+# 18. Critical Infrastructure: income math + display helpers
 # ============================================================================
 
 extends SceneTree
@@ -443,6 +447,178 @@ func _init() -> void:
 		print("  FAIL: get_short_status() malformed: '%s'" % ab_status)
 		all_passed = false
 	abandoned.recall(strain1)
+
+	# Test 15: Critical Infrastructure properties (JOO-21)
+	# Design intent (docs/ZONE_HEAT_SYSTEM.md): "Highest security, highest
+	# payout. Dramatically raises global threat level." So the profile must
+	# be the most extreme on every axis: payout ABOVE Government (5x), heat
+	# rate ABOVE Government (2.0), threshold BELOW Government (30), capacity
+	# AT Government's 1.
+	print("\n[15] Testing Critical Infrastructure properties (JOO-21)...")
+	var critical = Zone.create(Zone.ZoneType.CRITICAL_INFRA)
+
+	if critical.zone_name == "Critical Infrastructure":
+		print("  PASS: zone_name is 'Critical Infrastructure'")
+	else:
+		print("  FAIL: zone_name wrong: '%s'" % critical.zone_name)
+		all_passed = false
+
+	if critical.data_value == 8.0:
+		print("  PASS: payout is 8x (highest in game)")
+	else:
+		print("  FAIL: payout wrong: %.2f (expected 8.0)" % critical.data_value)
+		all_passed = false
+
+	if critical.detection_rate == 3.0:
+		print("  PASS: detection_rate 3.0 (fastest in game)")
+	else:
+		print("  FAIL: detection_rate wrong: %.2f (expected 3.0)" % critical.detection_rate)
+		all_passed = false
+
+	if critical.detection_threshold == 20.0:
+		print("  PASS: detection_threshold 20 (lowest in game -- raid checks trigger soonest)")
+	else:
+		print("  FAIL: detection_threshold wrong: %.0f (expected 20)" % critical.detection_threshold)
+		all_passed = false
+
+	if critical.capacity == 1:
+		print("  PASS: capacity 1 (single hard-won foothold)")
+	else:
+		print("  FAIL: capacity wrong: %d (expected 1)" % critical.capacity)
+		all_passed = false
+
+	# Extreme sanity: strictly above Government on payout + heat, below on threshold
+	if critical.data_value > gov.data_value and \
+			critical.detection_rate > gov.detection_rate and \
+			critical.detection_threshold < gov.detection_threshold:
+		print("  PASS: Critical Infra is strictly more extreme than Government (payout %.0f>%.0f, det %.1f>%.1f, thr %.0f<%.0f)" % [
+			critical.data_value, gov.data_value,
+			critical.detection_rate, gov.detection_rate,
+			critical.detection_threshold, gov.detection_threshold])
+	else:
+		print("  FAIL: Critical Infra not more extreme than Government")
+		all_passed = false
+
+	# Test 16: Critical Infrastructure capacity (1 strain fits, 2nd rejected)
+	print("\n[16] Testing Critical Infrastructure capacity=1...")
+	var ci_cap = Zone.create(Zone.ZoneType.CRITICAL_INFRA)
+	var cap_strain = Strain.create_seed()
+	if ci_cap.deploy(cap_strain):
+		print("  PASS: first strain deployed into Critical Infrastructure")
+	else:
+		print("  FAIL: deploy returned false for first strain")
+		all_passed = false
+
+	var cap_strain2 = Strain.create_seed()
+	if not ci_cap.deploy(cap_strain2):
+		print("  PASS: 2nd strain correctly rejected (capacity 1)")
+	else:
+		print("  FAIL: 2nd strain was accepted over capacity")
+		all_passed = false
+
+	if ci_cap.is_full() and ci_cap.get_free_slots() == 0:
+		print("  PASS: is_full() true, free slots 0 at capacity")
+	else:
+		print("  FAIL: capacity bookkeeping wrong (full=%s, free=%d)" % [
+			ci_cap.is_full(), ci_cap.get_free_slots()])
+		all_passed = false
+	ci_cap.recall(cap_strain)
+
+	# Test 17: Critical Infrastructure raid security -- the zone's detection
+	# rate (3.0) maps to security factor 0.9 (clamped), the hardest roll in
+	# the game. A weak strain (resilience 0.1) can only roll 0.1-0.4, so it
+	# ALWAYS fails; a max-resilience strain (0.9) rolls 0.9-1.2 and always
+	# survives. Note: Government's factor is 0.8, so this is strictly harder.
+	print("\n[17] Testing Critical Infrastructure raid security...")
+	var ci_weak = Strain.create_seed()
+	ci_weak.resilience = 0.1
+	var ci_tough = Strain.create_seed()
+	ci_tough.resilience = 0.9
+
+	# Weak strain must die: gather raid events, expect zero survivors.
+	# (No event cap -- with raid chance ~6%/sec, 300 ticks reliably produces
+	# 15+ events; requiring >=10 events proves the roll actually fired and
+	# still never let a weak strain through.)
+	var weak_zone = Zone.create(Zone.ZoneType.CRITICAL_INFRA)
+	weak_zone.zone_heat = 300.0  # way past threshold 20
+	weak_zone.deploy(ci_weak)
+	var weak_survived_any: bool = false
+	var weak_raid_events: int = 0
+	for i in range(300):
+		var r = weak_zone.tick(1.0)
+		for raid in r["raids"]:
+			weak_raid_events += 1
+			if raid["survived"]:
+				weak_survived_any = true
+		# Keep the zone hot so raids keep firing after heat resets
+		if weak_zone.deployed_strains.is_empty():
+			var respawn = Strain.create_seed()
+			respawn.resilience = 0.1
+			weak_zone.deploy(respawn)
+		if weak_zone.zone_heat < weak_zone.detection_threshold:
+			weak_zone.zone_heat = 300.0
+	if weak_raid_events >= 10 and not weak_survived_any:
+		print("  PASS: weak strain (resilience 0.1) died in %d/%d raid events" % [weak_raid_events, weak_raid_events])
+	else:
+		print("  FAIL: weak strain survived a Critical Infra raid (events=%d, survived=%s) -- security too soft" % [
+			weak_raid_events, weak_survived_any])
+		all_passed = false
+
+	# Tough strain must survive: same setup, max resilience.
+	var tough_zone = Zone.create(Zone.ZoneType.CRITICAL_INFRA)
+	tough_zone.zone_heat = 300.0
+	tough_zone.deploy(ci_tough)
+	var tough_alive: bool = true
+	for i in range(60):
+		var r = tough_zone.tick(1.0)
+		for raid in r["raids"]:
+			if not raid["survived"]:
+				tough_alive = false
+		if tough_zone.deployed_strains.is_empty():
+			tough_alive = false
+		if not tough_alive:
+			break
+		if tough_zone.zone_heat < tough_zone.detection_threshold:
+			tough_zone.zone_heat = 300.0
+	if tough_alive:
+		print("  PASS: tough strain (resilience 0.9) survived extended high-heat occupancy")
+	else:
+		print("  FAIL: tough strain died in Critical Infra -- roll math regressed")
+		all_passed = false
+
+	# Test 18: Critical Infrastructure income math + display helpers
+	print("\n[18] Testing Critical Infrastructure income + display...")
+	critical.deploy(strain1)
+	var ci_expected = strain1.get_income_per_second() * 8.0
+	var ci_actual = critical.get_zone_income()
+	if abs(ci_actual - ci_expected) < 0.01:
+		print("  PASS: zone income = base(%.1f) * 8.0 = %.2f" % [
+			strain1.get_income_per_second(), ci_actual])
+	else:
+		print("  FAIL: income wrong: expected %.2f, got %.2f" % [ci_expected, ci_actual])
+		all_passed = false
+
+	var ci_summary = critical.get_summary()
+	if ci_summary.contains("Critical Infrastructure") and ci_summary.contains("Payout"):
+		print("  PASS: get_summary() readable for Critical Infrastructure")
+	else:
+		print("  FAIL: get_summary() malformed: '%s'" % ci_summary)
+		all_passed = false
+
+	if critical.get_type_name() == "Critical Infrastructure" and critical.get_risk_label() == "Extreme Risk":
+		print("  PASS: display labels correct ('Critical Infrastructure', 'Extreme Risk')")
+	else:
+		print("  FAIL: display labels wrong: '%s' / '%s'" % [
+			critical.get_type_name(), critical.get_risk_label()])
+		all_passed = false
+
+	var ci_status = critical.get_short_status()
+	if ci_status.contains("Critical Infrastructure") and ci_status.contains("1/1"):
+		print("  PASS: get_short_status() shows capacity: '%s'" % ci_status)
+	else:
+		print("  FAIL: get_short_status() malformed: '%s'" % ci_status)
+		all_passed = false
+	critical.recall(strain1)
 
 	# Results
 	print("\n=== RESULTS ===")

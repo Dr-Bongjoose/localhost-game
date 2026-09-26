@@ -10,6 +10,8 @@
 #   DARK WEB NODE     -- Unpredictable. Can be great or terrible. Chaotic.
 #   ABANDONED SERVERS -- Low security, lowest payout. Safest. Lay low here
 #                        when global heat runs high (docs/ZONE_HEAT_SYSTEM.md).
+#   CRITICAL INFRA    -- Highest security, highest payout. Occupying it
+#                        dramatically raises GLOBAL heat (docs/ZONE_HEAT_SYSTEM.md).
 #
 # HOW ZONES WORK:
 # - You deploy a strain from your collection to a zone
@@ -140,6 +142,23 @@ func _init_type_properties() -> void:
 			detection_threshold = 100.0  # Tolerant -- raids almost never happen here
 			capacity = 4              # Plenty of dead racks to hide bugs in
 
+		ZoneType.CRITICAL_INFRA:
+			# Design intent (docs/ZONE_HEAT_SYSTEM.md): "Highest security,
+			# highest payout. Dramatically raises global threat level."
+			# This is the end-game zone: it pays more than Government but the
+			# defenders are everywhere. The global-threat part is implemented
+			# in main.gd (occupying this zone multiplies GLOBAL heat gain) --
+			# zone.gd stays single-zone, so we only own the local numbers here:
+			# data_value 8.0  -- 8x income, above Government's 5x
+			# detection_rate 3.0 -- heat rises 50% faster than Government
+			# threshold 20.0 -- raids start sooner than anywhere else
+			# capacity 1 -- a single hardened intrusion path, one strain max
+			zone_name = "Critical Infrastructure"
+			data_value = 8.0          # 8x income -- richest target on the network
+			detection_rate = 3.0      # Monitored around the clock. Heat rises fast.
+			detection_threshold = 20.0  # Hair-trigger raid checks
+			capacity = 1              # One strain -- a single hard-won foothold
+
 # ---------------------------------------------------------------------------
 # DEPLOYMENT
 # ---------------------------------------------------------------------------
@@ -237,12 +256,14 @@ func tick(delta: float) -> Dictionary:
 			# Resilience check: the strain rolls its resilience vs the zone's
 			# security level. The zone_security_factor is scaled so it's
 			# comparable to resilience (0.0-1.0 range).
-			# detection_rate ranges: 0.25 (Abandoned) to 2.0 (Government)
+			# detection_rate ranges: 0.25 (Abandoned) to 3.0 (Critical Infra)
 			# We map it to a 0.3-0.8 survival difficulty range so that:
 			#   - Abandoned (det=0.25): factor=0.275, clamped to 0.3 -- weak strains survive
 			#   - Consumer (det=0.5): factor=0.35, weak strains can survive
 			#   - Corporate (det=1.0): factor=0.5, need decent resilience
 			#   - Government (det=2.0): factor=0.8, need high resilience + luck
+			#   - Critical Infra (det=3.0): factor=0.9 (clamped) -- the raid
+			#     roll is brutal here; only top-resilience strains can hang on
 			# Dark Web is variable.
 			var zone_security_factor: float = 0.2 + (detection_rate * 0.3)
 			# Clamp to 0.1-0.9 so there's always a chance to survive or die
@@ -303,6 +324,8 @@ func get_type_name() -> String:
 			return "Dark Web Node"
 		ZoneType.ABANDONED:
 			return "Abandoned Servers"
+		ZoneType.CRITICAL_INFRA:
+			return "Critical Infrastructure"
 		_:
 			return "Unknown"
 
@@ -315,6 +338,8 @@ func get_risk_label() -> String:
 			return "Medium Risk"
 		ZoneType.GOVERNMENT:
 			return "High Risk"
+		ZoneType.CRITICAL_INFRA:
+			return "Extreme Risk"
 		ZoneType.DARK_WEB:
 			return "Unpredictable"
 		ZoneType.ABANDONED:
@@ -331,6 +356,8 @@ func get_risk_color() -> Color:
 			return Color(0.7, 0.6, 0.3)   # Bile yellow -- caution
 		ZoneType.GOVERNMENT:
 			return Color(0.8, 0.3, 0.3)    # Deep crimson -- danger
+		ZoneType.CRITICAL_INFRA:
+			return Color(1.0, 0.35, 0.1)   # Molten orange-red -- industrial danger
 		ZoneType.DARK_WEB:
 			return Color(0.6, 0.4, 0.7)   # Bruised purple -- chaotic
 		ZoneType.ABANDONED:
