@@ -212,6 +212,7 @@ func _ready() -> void:
 	assign_defender_button.pressed.connect(_on_assign_defender_pressed)
 	recall_defender_button.pressed.connect(_on_recall_defender_pressed)
 	perimeter_button.pressed.connect(_on_perimeter_pressed)
+	_setup_touch_scroll()
 
 	update_breed_cost_display()
 	_switch_view("containment")
@@ -491,24 +492,19 @@ func _process(delta: float) -> void:
 
 
 # ---------------------------------------------------------------------------
-# TOUCH INPUT / SCROLL FIXES (UX findings 4+6, JOO-24)
+# TOUCH INPUT / SCROLL FIXES (UX finding 6, JOO-24)
 # ---------------------------------------------------------------------------
-# Two fixes live here:
-# 1) ScrollContainer: on Android, dragging inside a Button/Panel that doesn't
-#    consume the drag should scroll the list -- that's what "touch drag" does.
-#    With mouse emulation on, scroll only worked from "empty" pixels, so the
-#    page appeared frozen when a panel filled the viewport (QA finding #6).
-# 2) _gui_input on the root passes through so scroll works with touch drags.
+# The root ScrollContainer previously used the default scrollbar mode, which
+# on Android gave no persistent visual cue that content continues below the
+# fold (QA finding #6: "content below the fold only reachable when the layout
+# happens to fit"). Showing the scrollbar always gives the player a visible
+# "there is more" affordance; combined with touch-drag scrolling
+# (pointing/emulate_touch_from_mouse) the page is now scrollable everywhere,
+# including over panels and buttons.
 func _setup_touch_scroll() -> void:
 	var scroll: ScrollContainer = $ScrollContainer
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_ALWAYS
-
-
-func _input(event: InputEvent) -> void:
-	# Nothing to swallow here; exists so _unhandled_input back handling stays
-	# predictable across views. Kept minimal on purpose (no unrelated refactors).
-	pass
 
 
 # ---------------------------------------------------------------------------

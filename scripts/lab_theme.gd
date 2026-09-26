@@ -129,6 +129,18 @@ static func create() -> Theme:
 	theme.set_color("font_color", "OptionButton", BTN_TEXT)
 	theme.set_color("font_hover_color", "OptionButton", TEXT_TITLE)
 	theme.set_font_size("font_size", "OptionButton", 13)
+	# BUG-1/UX-2 fix (JOO-24): dropdown popups were near-invisible at the bottom
+	# edge -- dark text on dark bg. Give the popup a bright item style, a
+	# readable font, and taller rows so thumbs can hit them.
+	var popup_panel: StyleBoxFlat = _make_panel_style(Color(0.03, 0.05, 0.04, 0.98), BG_PANEL_BORDER, CORNER_RADIUS_PANEL)
+	theme.set_stylebox("panel", "PopupMenu", popup_panel)
+	var popup_hover: StyleBoxFlat = _make_button_style(BTN_HOVER, BTN_BORDER_HOVER, CORNER_RADIUS)
+	theme.set_stylebox("hover", "PopupMenu", popup_hover)
+	theme.set_stylebox("pressed", "PopupMenu", popup_hover)
+	theme.set_color("font_color", "PopupMenu", Color(0.92, 0.95, 0.92, 1))
+	theme.set_color("font_hover_color", "PopupMenu", Color(1, 1, 1, 1))
+	theme.set_font_size("font_size", "PopupMenu", 18)
+	theme.set_constant("v_separation", "PopupMenu", 14)
 
 	# --- PANEL STYLES ---
 	# v2: Panels now have bioluminescent borders (glowing green edges) and
