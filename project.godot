@@ -14,7 +14,7 @@ config/name="LOCALHOST"
 config/description="A strategic idle/incremental game about breeding sentient malware organisms."
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
-quit_on_go_back=false
+config/quit_on_go_back=false
 run/main_scene="res://scenes/main.tscn"
 
 [display]
